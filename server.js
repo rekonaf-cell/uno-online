@@ -72,10 +72,32 @@ io.on('connection', (socket) => {
     broadcastState(room);
   });
 
-  socket.on('playCard', ({ cardId, chosenColor }) => {
+  socket.on('playCard', ({ cardId, chosenSuit }) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || !room.started) return;
-    const result = room.playCard(socket.id, cardId, chosenColor);
+    const result = room.playCard(socket.id, cardId, chosenSuit);
+    if (result.error) {
+      socket.emit('errorMsg', result.error);
+      return;
+    }
+    broadcastState(room);
+  });
+
+  socket.on('ron', () => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || !room.started) return;
+    const result = room.ron(socket.id);
+    if (result.error) {
+      socket.emit('errorMsg', result.error);
+      return;
+    }
+    broadcastState(room);
+  });
+
+  socket.on('declarePageOne', () => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || !room.started) return;
+    const result = room.declarePageOne(socket.id);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;

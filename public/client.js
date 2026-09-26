@@ -13,20 +13,28 @@ function showScreen(name) {
 }
 
 let myId = null;
-let latestState = null;
-let pendingWildCardId = null;
+let pendingSuitCardId = null;
 
-const colorNames = { red: '赤', yellow: '黄', green: '緑', blue: '青', wild: 'ワイルド' };
-const typeNames = { skip: 'スキップ', reverse: 'リバース', draw2: '+2', wild: 'ワイルド', wild4: '+4' };
+const suitSymbols = { spade: '♠', heart: '♥', diamond: '♦', club: '♣' };
+const suitNames = { spade: 'スペード', heart: 'ハート', diamond: 'ダイヤ', club: 'クラブ' };
+const redSuits = ['heart', 'diamond'];
+
+function rankLabel(rank) {
+  if (rank === 1) return 'A';
+  if (rank === 11) return 'J';
+  if (rank === 12) return 'Q';
+  if (rank === 13) return 'K';
+  return String(rank);
+}
 
 function cardLabel(card) {
-  if (card.type === 'number') return String(card.value);
-  if (card.type === 'skip') return '⦸';
-  if (card.type === 'reverse') return '⟲';
-  if (card.type === 'draw2') return '+2';
-  if (card.type === 'wild') return 'W';
-  if (card.type === 'wild4') return '+4';
-  return '?';
+  if (card.type === 'joker') return 'JOKER';
+  return `${suitSymbols[card.suit]}${rankLabel(card.rank)}`;
+}
+
+function cardColorClass(card) {
+  if (card.type === 'joker') return 'joker';
+  return redSuits.includes(card.suit) ? 'red-suit' : 'black-suit';
 }
 
 function showToast(msg) {
@@ -74,13 +82,21 @@ document.getElementById('endTurnBtn').addEventListener('click', () => {
   socket.emit('endTurn');
 });
 
-document.querySelectorAll('.color-btn').forEach((btn) => {
+document.getElementById('pageOneBtn').addEventListener('click', () => {
+  socket.emit('declarePageOne');
+});
+
+document.getElementById('ronBtn').addEventListener('click', () => {
+  socket.emit('ron');
+});
+
+document.querySelectorAll('.suit-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
-    const color = btn.dataset.color;
-    document.getElementById('colorModal').classList.add('hidden');
-    if (pendingWildCardId !== null) {
-      socket.emit('playCard', { cardId: pendingWildCardId, chosenColor: color });
-      pendingWildCardId = null;
+    const suit = btn.dataset.suit;
+    document.getElementById('suitModal').classList.add('hidden');
+    if (pendingSuitCardId !== null) {
+      socket.emit('playCard', { cardId: pendingSuitCardId, chosenSuit: suit });
+      pendingSuitCardId = null;
     }
   });
 });
@@ -92,7 +108,6 @@ socket.on('connect', () => {
 socket.on('errorMsg', (msg) => showToast(msg));
 
 socket.on('state', (state) => {
-  latestState = state;
   myId = socket.id;
   render(state);
 });
@@ -141,25 +156,32 @@ function renderGame(state) {
   for (const p of others) {
     const div = document.createElement('div');
     div.className = 'opponent' + (p.id === state.currentPlayerId ? ' active' : '') + (!p.connected ? ' disconnected' : '');
-    div.innerHTML = `<div class="oname">${escapeHtml(p.name)}</div><div class="ocount">${p.cardCount}</div>`;
+    const tag = p.declaredPageOne ? ' <span class="tag">📢1枚</span>' : '';
+    div.innerHTML = `<div class="oname">${escapeHtml(p.name)}${tag}</div><div class="ocount">${p.cardCount}</div>`;
     oppDiv.appendChild(div);
   }
 
   const discardTop = document.getElementById('discardTop');
   if (state.topCard) {
-    discardTop.className = 'card ' + (state.currentColor || state.topCard.color);
+    discardTop.className = 'card ' + cardColorClass(state.topCard);
     discardTop.textContent = cardLabel(state.topCard);
   }
   document.getElementById('deckCount').textContent = state.deckCount;
 
   const isMyTurn = state.currentPlayerId === myId;
   const turnInfo = document.getElementById('turnInfo');
+  let info = '';
   if (isMyTurn) {
-    turnInfo.textContent = 'あなたの番です';
+    info = 'あなたの番です';
   } else {
     const cp = state.players.find((p) => p.id === state.currentPlayerId);
-    turnInfo.textContent = cp ? `${cp.name} の番です` : '';
+    info = cp ? `${cp.name} の番です` : '';
   }
+  info += ` / 場のマーク: ${suitSymbols[state.currentSuit] || ''}${suitNames[state.currentSuit] || ''}`;
+  if (state.pendingChain) {
+    info += ` / ${state.pendingChain.rank}が連続中！ 引くと${state.pendingChain.amount}枚`;
+  }
+  turnInfo.textContent = info;
 
   document.getElementById('myName').textContent = me ? me.name + '(あなた)' : '';
 
@@ -167,16 +189,16 @@ function renderGame(state) {
   handDiv.innerHTML = '';
   const hand = state.myHand || [];
   for (const card of hand) {
-    const canPlay = isMyTurn && !state.pendingDraw && cardCanPlay(card, state.topCard, state.currentColor);
+    const canPlay = isMyTurn && !state.pendingDraw && cardCanPlay(card, state.topCard, state.currentSuit, state.pendingChain);
     const div = document.createElement('div');
-    div.className = 'card ' + (card.type === 'wild' || card.type === 'wild4' ? 'wild' : card.color) + ' ' + (canPlay ? 'playable' : 'unplayable');
+    div.className = 'card ' + cardColorClass(card) + ' ' + (canPlay ? 'playable' : 'unplayable');
     div.textContent = cardLabel(card);
     div.addEventListener('click', () => {
       if (!isMyTurn || state.pendingDraw) return showToast('今は出せません');
-      if (!cardCanPlay(card, state.topCard, state.currentColor)) return showToast('出せないカードです');
-      if (card.type === 'wild' || card.type === 'wild4') {
-        pendingWildCardId = card.id;
-        document.getElementById('colorModal').classList.remove('hidden');
+      if (!cardCanPlay(card, state.topCard, state.currentSuit, state.pendingChain)) return showToast('出せないカードです');
+      if (card.type === 'joker' || card.rank === 8) {
+        pendingSuitCardId = card.id;
+        document.getElementById('suitModal').classList.remove('hidden');
       } else {
         socket.emit('playCard', { cardId: card.id });
       }
@@ -186,18 +208,22 @@ function renderGame(state) {
 
   document.getElementById('drawBtn').classList.toggle('hidden', !isMyTurn || state.pendingDraw);
   document.getElementById('endTurnBtn').classList.toggle('hidden', !isMyTurn || !state.pendingDraw);
+  document.getElementById('pageOneBtn').classList.toggle('hidden', !state.canDeclarePageOne);
+  document.getElementById('ronBtn').classList.toggle('hidden', !state.canRon);
 
   const logBox = document.getElementById('logBox');
   logBox.innerHTML = state.log.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
   logBox.scrollTop = logBox.scrollHeight;
 }
 
-function cardCanPlay(card, topCard, currentColor) {
+function cardCanPlay(card, topCard, currentSuit, pendingChain) {
+  if (pendingChain) {
+    return card.rank === pendingChain.rank;
+  }
   if (!topCard) return true;
-  if (card.type === 'wild' || card.type === 'wild4') return true;
-  if (card.color === currentColor) return true;
-  if (topCard.type === 'number' && card.type === 'number') return card.value === topCard.value;
-  if (topCard.type !== 'number' && card.type === topCard.type) return true;
+  if (card.type === 'joker') return true;
+  if (card.suit === currentSuit) return true;
+  if (topCard.type === 'normal' && card.rank === topCard.rank) return true;
   return false;
 }
 

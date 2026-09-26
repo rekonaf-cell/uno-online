@@ -102,6 +102,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   justify-content: center;
   gap: 16px;
   padding: 12px 0;
+  margin-bottom: 30px;
   position: relative;
 }
 
@@ -136,23 +137,30 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   border: 2px solid rgba(255,255,255,0.2);
 }
 
-.card.red { background: var(--red); }
-.card.yellow { background: var(--yellow); color: #222; }
-.card.green { background: var(--green); }
-.card.blue { background: var(--blue); }
-.card.wild { background: linear-gradient(135deg, var(--red), var(--yellow), var(--green), var(--blue)); }
+.card.red-suit,
+.card.black-suit {
+  background: #f5f0e6;
+}
+.card.red-suit { color: #d21f1f; }
+.card.black-suit { color: #1a1a1a; }
+.card.joker {
+  background: linear-gradient(135deg, var(--red), var(--yellow), var(--green), var(--blue));
+  color: white;
+  font-size: 14px;
+}
 
 .card.playable { transform: translateY(-10px); box-shadow: 0 0 0 3px white, 0 4px 10px rgba(0,0,0,0.5); }
 .card.unplayable { filter: brightness(0.6); }
 
 #turnInfo {
   position: absolute;
-  bottom: -20px;
+  bottom: -34px;
   left: 0;
   right: 0;
   text-align: center;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--muted);
+  padding: 0 8px;
 }
 
 #myArea { padding: 8px 0; }
@@ -200,22 +208,31 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   text-align: center;
   width: 280px;
 }
-.color-choices {
+.suit-choices {
   display: flex;
   gap: 10px;
   justify-content: center;
   margin-top: 12px;
 }
-.color-btn {
+.suit-btn {
   width: 56px;
   height: 56px;
   border-radius: 50%;
   border: 2px solid white;
+  background: #f5f0e6;
+  font-size: 26px;
+  line-height: 1;
 }
-.color-btn.red { background: var(--red); }
-.color-btn.yellow { background: var(--yellow); }
-.color-btn.green { background: var(--green); }
-.color-btn.blue { background: var(--blue); }
+.suit-btn.red { color: #d21f1f; }
+.suit-btn.black { color: #1a1a1a; }
+
+.pageone-btn { background: #d21f1f; }
+.ron-btn { background: #b8860b; }
+
+.opponent .tag {
+  font-size: 10px;
+  color: var(--yellow);
+}
 
 .toast {
   position: fixed;

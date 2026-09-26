@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>UNO Online</title>
+<title>ページワン Online</title>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="app">
     <!-- ロビー画面 -->
     <section id="lobby" class="screen">
-      <h1>UNO Online</h1>
+      <h1>ページワン Online</h1>
       <input id="nameInput" type="text" placeholder="ニックネーム" maxlength="12" />
       <button id="createBtn">部屋を作る</button>
       <div class="divider">または</div>
@@ -44,21 +44,23 @@
         <div id="actions">
           <button id="drawBtn" class="hidden">カードを引く</button>
           <button id="endTurnBtn" class="hidden">ターン終了</button>
+          <button id="pageOneBtn" class="hidden pageone-btn">ページワン！</button>
+          <button id="ronBtn" class="hidden ron-btn">ロン！</button>
         </div>
       </div>
 
       <div id="logBox"></div>
     </section>
 
-    <!-- 色選択モーダル -->
-    <div id="colorModal" class="modal hidden">
+    <!-- マーク選択モーダル -->
+    <div id="suitModal" class="modal hidden">
       <div class="modal-content">
-        <p>色を選んでください</p>
-        <div class="color-choices">
-          <button data-color="red" class="color-btn red"></button>
-          <button data-color="yellow" class="color-btn yellow"></button>
-          <button data-color="green" class="color-btn green"></button>
-          <button data-color="blue" class="color-btn blue"></button>
+        <p>マークを選んでください</p>
+        <div class="suit-choices">
+          <button data-suit="spade" class="suit-btn black">♠</button>
+          <button data-suit="heart" class="suit-btn red">♥</button>
+          <button data-suit="diamond" class="suit-btn red">♦</button>
+          <button data-suit="club" class="suit-btn black">♣</button>
         </div>
       </div>
     </div>
