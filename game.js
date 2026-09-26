@@ -110,7 +110,7 @@ class Room {
 
   addPlayer(id, name) {
     if (this.players.find((p) => p.id === id)) return;
-    this.players.push({ id, name, hand: [], connected: true, declaredPageOne: false, score: 0 });
+    this.players.push({ id, name, hand: [], connected: true, declaredPageOne: false, score: 0, furitenRanks: [] });
   }
 
   removePlayer(id) {
@@ -150,6 +150,7 @@ class Room {
     for (const player of this.players) {
       player.hand = this.deck.splice(0, handSize);
       player.declaredPageOne = false;
+      player.furitenRanks = [];
     }
 
     let firstCard = this.deck.pop();
@@ -201,6 +202,8 @@ class Room {
     const playerIndex = this.players.findIndex((p) => p.id === playerId);
     if (playerIndex !== this.currentPlayerIndex) return { error: 'あなたの番ではありません' };
     const player = this.players[playerIndex];
+    player.furitenRanks = []; // their own turn has arrived: any furiten lock clears
+
     const cardIndex = player.hand.findIndex((c) => c.id === cardId);
     if (cardIndex === -1) return { error: 'そのカードは手札にありません' };
     const card = player.hand[cardIndex];
@@ -214,8 +217,13 @@ class Room {
     }
 
     const willWin = player.hand.length === 1;
-    if (willWin && !canFinishWith(card)) {
-      return { error: 'ジョーカーでは上がれません' };
+    if (willWin) {
+      if (!canFinishWith(card)) {
+        return { error: 'ジョーカーでは上がれません' };
+      }
+      if (card.rank !== 8 && !player.declaredPageOne) {
+        return { error: 'ページワンを宣言していないので今は上がれません。カードを引いてください' };
+      }
     }
 
     if ((card.type === 'joker' || card.rank === 8) && !SUITS.includes(chosenSuit)) {
@@ -251,6 +259,20 @@ class Room {
     }
 
     this.addLog(`${player.name} が ${describeCard(card)} を出しました`);
+
+    // The previous discard is about to be superseded. Anyone who could have
+    // ronned on it but didn't is now furiten on that rank until their own
+    // turn comes around.
+    if (this.lastDiscardCard) {
+      const oldRank = this.lastDiscardCard.rank;
+      for (const other of this.players) {
+        if (other.id === player.id) continue;
+        if (canRon(other.hand, oldRank) && !other.furitenRanks.includes(oldRank)) {
+          other.furitenRanks.push(oldRank);
+        }
+      }
+    }
+
     this.lastDiscardCard = card.type === 'normal' ? card : null;
     this.lastDiscardPlayerId = player.id;
 
@@ -291,6 +313,7 @@ class Room {
     const playerIndex = this.players.findIndex((p) => p.id === playerId);
     if (playerIndex !== this.currentPlayerIndex) return { error: 'あなたの番ではありません' };
     const player = this.players[playerIndex];
+    player.furitenRanks = []; // their own turn has arrived: any furiten lock clears
 
     if (this.pendingChain) {
       const amount = this.pendingChain.amount;
@@ -323,6 +346,9 @@ class Room {
     if (playerId === this.lastDiscardPlayerId) return { error: '自分が出したカードにはロンできません' };
     const player = this.players.find((p) => p.id === playerId);
     if (!player) return { error: 'プレイヤーが見つかりません' };
+    if (player.furitenRanks.includes(this.lastDiscardCard.rank)) {
+      return { error: 'この数字は一度見送っているのでロンできません(自分の番が来るまでフリテン)' };
+    }
     if (!canRon(player.hand, this.lastDiscardCard.rank)) {
       return { error: '手札の合計が一致していません' };
     }
@@ -397,6 +423,7 @@ class Room {
         me &&
         this.lastDiscardCard &&
         this.lastDiscardPlayerId !== forPlayerId &&
+        !me.furitenRanks.includes(this.lastDiscardCard.rank) &&
         canRon(me.hand, this.lastDiscardCard.rank)
       ),
     };
