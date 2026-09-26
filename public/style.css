@@ -233,6 +233,22 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   font-size: 10px;
   color: var(--yellow);
 }
+.opponent .oscore {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+#roundResultList {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  text-align: left;
+  font-size: 14px;
+}
+#roundResultList li {
+  padding: 4px 0;
+  border-bottom: 1px solid #333;
+}
 
 .toast {
   position: fixed;

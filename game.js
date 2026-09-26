@@ -54,6 +54,24 @@ function canRon(hand, target) {
   return remaining >= jokerCount * 1 && remaining <= jokerCount * 13;
 }
 
+// Point value of a single card for end-of-round scoring (NOT the same as
+// its rank used for turn order / ron matching). A, 3 and Joker are all
+// worth 10. J/Q/K keep 11/12/13. A "2" contributes no value on its own;
+// instead every 2 in the hand doubles the total of everything else.
+function cardPointValue(card) {
+  if (card.type === 'joker') return 10;
+  if (card.rank === 1) return 10;
+  if (card.rank === 3) return 10;
+  if (card.rank === 2) return 0;
+  return card.rank;
+}
+
+function handScore(hand) {
+  const twoCount = hand.filter((c) => c.rank === 2).length;
+  const base = hand.filter((c) => c.rank !== 2).reduce((s, c) => s + cardPointValue(c), 0);
+  return base * Math.pow(2, twoCount);
+}
+
 function rankLabel(rank) {
   if (rank === 1) return 'A';
   if (rank === 11) return 'J';
@@ -85,12 +103,14 @@ class Room {
     this.pendingChain = null; // { rank: 2|3, amount: N }
     this.lastDiscardCard = null; // most recent discard, ron-able until superseded
     this.lastDiscardPlayerId = null;
+    this.lastWinType = null; // 'normal' | 'ron'
+    this.lastRoundDeltas = null; // { [playerId]: pointChange }
     this.log = [];
   }
 
   addPlayer(id, name) {
     if (this.players.find((p) => p.id === id)) return;
-    this.players.push({ id, name, hand: [], connected: true, declaredPageOne: false });
+    this.players.push({ id, name, hand: [], connected: true, declaredPageOne: false, score: 0 });
   }
 
   removePlayer(id) {
@@ -122,6 +142,8 @@ class Room {
     this.pendingChain = null;
     this.lastDiscardCard = null;
     this.lastDiscardPlayerId = null;
+    this.lastWinType = null;
+    this.lastRoundDeltas = null;
     this.log = [];
 
     const handSize = 7;
@@ -209,7 +231,22 @@ class Room {
       this.started = false;
       this.lastDiscardCard = null;
       this.lastDiscardPlayerId = null;
-      this.addLog(`${player.name} が上がりました！`);
+
+      const deltas = {};
+      let totalGain = 0;
+      for (const other of this.players) {
+        if (other.id === player.id) continue;
+        const pts = handScore(other.hand);
+        other.score -= pts;
+        deltas[other.id] = -pts;
+        totalGain += pts;
+      }
+      player.score += totalGain;
+      deltas[player.id] = totalGain;
+      this.lastWinType = 'normal';
+      this.lastRoundDeltas = deltas;
+
+      this.addLog(`${player.name} が上がりました！(+${totalGain}点)`);
       return { success: true };
     }
 
@@ -289,12 +326,21 @@ class Room {
     if (!canRon(player.hand, this.lastDiscardCard.rank)) {
       return { error: '手札の合計が一致していません' };
     }
+    const discarder = this.players.find((p) => p.id === this.lastDiscardPlayerId);
+    const target = this.lastDiscardCard.rank;
+    const pts = handScore(discarder.hand) * 2;
+
     this.winnerId = player.id;
     this.started = false;
-    const target = this.lastDiscardCard.rank;
     this.lastDiscardCard = null;
     this.lastDiscardPlayerId = null;
-    this.addLog(`${player.name} が ロン！(合計${target}) で上がりました`);
+
+    discarder.score -= pts;
+    player.score += pts;
+    this.lastWinType = 'ron';
+    this.lastRoundDeltas = { [player.id]: pts, [discarder.id]: -pts };
+
+    this.addLog(`${player.name} が ロン！(合計${target}) ${discarder.name}から${pts}点`);
     return { success: true };
   }
 
@@ -333,8 +379,11 @@ class Room {
         connected: p.connected,
         isMe: p.id === forPlayerId,
         declaredPageOne: p.declaredPageOne,
+        score: p.score,
       })),
       myHand: this.started && me ? me.hand : [],
+      lastWinType: this.lastWinType,
+      lastRoundDeltas: this.lastRoundDeltas,
       canDeclarePageOne: !!(
         me &&
         me.hand.length === 1 &&

@@ -70,6 +70,10 @@ document.getElementById('backToLobbyBtn').addEventListener('click', () => {
   showScreen('lobby');
 });
 
+document.getElementById('nextRoundBtn').addEventListener('click', () => {
+  socket.emit('startGame');
+});
+
 document.getElementById('drawPile').addEventListener('click', () => {
   socket.emit('drawCard');
 });
@@ -121,9 +125,27 @@ function render(state) {
   if (state.winnerId) {
     renderGame(state);
     const winner = state.players.find((p) => p.id === state.winnerId);
+    const winKindText = state.lastWinType === 'ron' ? '（ロン！）' : '';
     document.getElementById('winText').textContent = winner
-      ? `${winner.name} の勝ち！🎉`
+      ? `${winner.name} の勝ち！🎉${winKindText}`
       : 'ゲーム終了';
+
+    const resultList = document.getElementById('roundResultList');
+    resultList.innerHTML = '';
+    if (state.lastRoundDeltas) {
+      for (const p of state.players) {
+        const delta = state.lastRoundDeltas[p.id];
+        if (delta === undefined) continue;
+        const li = document.createElement('li');
+        const sign = delta > 0 ? '+' : '';
+        li.textContent = `${p.name}: ${sign}${delta}点 (累計 ${p.score}点)`;
+        resultList.appendChild(li);
+      }
+    }
+
+    const isHost = state.hostId === myId;
+    document.getElementById('nextRoundBtn').classList.toggle('hidden', !isHost);
+
     document.getElementById('winModal').classList.remove('hidden');
     return;
   }
@@ -157,7 +179,7 @@ function renderGame(state) {
     const div = document.createElement('div');
     div.className = 'opponent' + (p.id === state.currentPlayerId ? ' active' : '') + (!p.connected ? ' disconnected' : '');
     const tag = p.declaredPageOne ? ' <span class="tag">📢1枚</span>' : '';
-    div.innerHTML = `<div class="oname">${escapeHtml(p.name)}${tag}</div><div class="ocount">${p.cardCount}</div>`;
+    div.innerHTML = `<div class="oname">${escapeHtml(p.name)}${tag}</div><div class="ocount">${p.cardCount}</div><div class="oscore">${p.score}点</div>`;
     oppDiv.appendChild(div);
   }
 
@@ -183,7 +205,7 @@ function renderGame(state) {
   }
   turnInfo.textContent = info;
 
-  document.getElementById('myName').textContent = me ? me.name + '(あなた)' : '';
+  document.getElementById('myName').textContent = me ? `${me.name}(あなた) / ${me.score}点` : '';
 
   const handDiv = document.getElementById('hand');
   handDiv.innerHTML = '';
