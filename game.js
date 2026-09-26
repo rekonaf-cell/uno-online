@@ -103,9 +103,16 @@ class Room {
     this.pendingChain = null; // { rank: 2|3, amount: N }
     this.lastDiscardCard = null; // most recent discard, ron-able until superseded
     this.lastDiscardPlayerId = null;
-    this.lastWinType = null; // 'normal' | 'ron'
+    this.lastWinType = null; // 'normal' | 'ron' | 'dosun'
     this.lastRoundDeltas = null; // { [playerId]: pointChange }
     this.log = [];
+
+    this.phase = 'lobby'; // 'lobby' | 'dice' | 'handSize' | 'playing' | 'roundEnd'
+    this.dealerId = null;
+    this.diceContenders = [];
+    this.diceRolls = {}; // { [playerId]: { d1, d2, total } }
+    this.diceRollPending = [];
+    this.dosunAvailable = false;
   }
 
   addPlayer(id, name) {
@@ -131,12 +138,13 @@ class Room {
     if (this.log.length > 30) this.log.shift();
   }
 
-  start() {
+  start(handSize = 7) {
     this.deck = shuffle(createDeck());
     this.discardPile = [];
     this.direction = 1;
     this.currentPlayerIndex = 0;
     this.started = true;
+    this.phase = 'playing';
     this.winnerId = null;
     this.pendingDraw = false;
     this.pendingChain = null;
@@ -146,7 +154,6 @@ class Room {
     this.lastRoundDeltas = null;
     this.log = [];
 
-    const handSize = 7;
     for (const player of this.players) {
       player.hand = this.deck.splice(0, handSize);
       player.declaredPageOne = false;
@@ -161,8 +168,9 @@ class Room {
     }
     this.discardPile.push(firstCard);
     this.currentSuit = firstCard.suit;
+    this.dosunAvailable = true;
 
-    this.addLog('ゲーム開始！');
+    this.addLog(`ゲーム開始！(${handSize}枚配り) 最初の場札は${describeCard(firstCard)}`);
 
     if (firstCard.rank === 11) {
       this.direction = -1;
@@ -173,6 +181,69 @@ class Room {
     } else if (firstCard.rank === 3) {
       this.pendingChain = { rank: 3, amount: 3 };
     }
+  }
+
+  // Kicks off the pre-round sequence: a dice-off to pick the very first
+  // dealer, or (once a dealer already exists) straight to hand-size choice.
+  beginRound() {
+    if (this.dealerId === null) {
+      const contenders = this.players.filter((p) => p.connected).map((p) => p.id);
+      if (contenders.length < 2) return { error: '2人以上必要です' };
+      this.phase = 'dice';
+      this.diceContenders = contenders;
+      this.diceRolls = {};
+      this.diceRollPending = [...contenders];
+      this.addLog('親を決めるサイコロを振ってください！');
+    } else {
+      this.phase = 'handSize';
+      const dealerName = this.players.find((p) => p.id === this.dealerId).name;
+      this.addLog(`${dealerName} が親です。配る枚数を選んでください`);
+    }
+    return { success: true };
+  }
+
+  rollDice(playerId) {
+    if (this.phase !== 'dice') return { error: '今はサイコロを振れません' };
+    if (!this.diceRollPending.includes(playerId)) {
+      return { error: '振る番ではないか、すでに振っています' };
+    }
+    const d1 = 1 + Math.floor(Math.random() * 6);
+    const d2 = 1 + Math.floor(Math.random() * 6);
+    const total = d1 + d2;
+    this.diceRolls[playerId] = { d1, d2, total };
+    this.diceRollPending = this.diceRollPending.filter((id) => id !== playerId);
+
+    const name = this.players.find((p) => p.id === playerId).name;
+    this.addLog(`${name} がサイコロで ${d1}+${d2}=${total}`);
+
+    if (this.diceRollPending.length === 0) {
+      const maxTotal = Math.max(...this.diceContenders.map((id) => this.diceRolls[id].total));
+      const tied = this.diceContenders.filter((id) => this.diceRolls[id].total === maxTotal);
+      if (tied.length === 1) {
+        this.dealerId = tied[0];
+        this.phase = 'handSize';
+        const dealerName = this.players.find((p) => p.id === tied[0]).name;
+        this.addLog(`${dealerName} が親に決定！`);
+      } else {
+        this.diceContenders = tied;
+        this.diceRollPending = [...tied];
+        const names = tied.map((id) => this.players.find((p) => p.id === id).name).join('・');
+        this.addLog(`同点(${maxTotal})のため ${names} で振り直します`);
+      }
+    }
+    return { success: true };
+  }
+
+  chooseHandSize(playerId, size) {
+    if (this.phase !== 'handSize') return { error: '今は枚数を選べません' };
+    if (playerId !== this.dealerId) return { error: '親だけが枚数を選べます' };
+    const n = Number(size);
+    if (!Number.isInteger(n) || n < 3) return { error: '3枚以上の整数を指定してください' };
+    if (n * this.players.length + 1 > 108) {
+      return { error: '人数に対して枚数が多すぎます' };
+    }
+    this.start(n);
+    return { success: true };
   }
 
   drawCards(player, count) {
@@ -203,6 +274,7 @@ class Room {
     if (playerIndex !== this.currentPlayerIndex) return { error: 'あなたの番ではありません' };
     const player = this.players[playerIndex];
     player.furitenRanks = []; // their own turn has arrived: any furiten lock clears
+    this.dosunAvailable = false; // window for hitting the opening card is over
 
     const cardIndex = player.hand.findIndex((c) => c.id === cardId);
     if (cardIndex === -1) return { error: 'そのカードは手札にありません' };
@@ -237,6 +309,8 @@ class Room {
     if (player.hand.length === 0) {
       this.winnerId = player.id;
       this.started = false;
+      this.phase = 'roundEnd';
+      this.dealerId = player.id;
       this.lastDiscardCard = null;
       this.lastDiscardPlayerId = null;
 
@@ -314,6 +388,7 @@ class Room {
     if (playerIndex !== this.currentPlayerIndex) return { error: 'あなたの番ではありません' };
     const player = this.players[playerIndex];
     player.furitenRanks = []; // their own turn has arrived: any furiten lock clears
+    this.dosunAvailable = false; // window for hitting the opening card is over
 
     if (this.pendingChain) {
       const amount = this.pendingChain.amount;
@@ -358,6 +433,8 @@ class Room {
 
     this.winnerId = player.id;
     this.started = false;
+    this.phase = 'roundEnd';
+    this.dealerId = player.id;
     this.lastDiscardCard = null;
     this.lastDiscardPlayerId = null;
 
@@ -367,6 +444,40 @@ class Room {
     this.lastRoundDeltas = { [player.id]: pts, [discarder.id]: -pts };
 
     this.addLog(`${player.name} が ロン！(合計${target}) ${discarder.name}から${pts}点`);
+    return { success: true };
+  }
+
+  dosun(playerId) {
+    if (!this.started || this.winnerId) return { error: '今はドスンできません' };
+    if (!this.dosunAvailable) return { error: '今はドスンできません' };
+    const player = this.players.find((p) => p.id === playerId);
+    if (!player) return { error: 'プレイヤーが見つかりません' };
+    if (!canRon(player.hand, this.topCard.rank)) {
+      return { error: '手札の合計が一致していません' };
+    }
+
+    const target = this.topCard.rank;
+    const deltas = {};
+    let totalGain = 0;
+    for (const other of this.players) {
+      if (other.id === player.id) continue;
+      const pts = handScore(other.hand) * 2;
+      other.score -= pts;
+      deltas[other.id] = -pts;
+      totalGain += pts;
+    }
+    player.score += totalGain;
+    deltas[player.id] = totalGain;
+
+    this.winnerId = player.id;
+    this.started = false;
+    this.phase = 'roundEnd';
+    this.dealerId = player.id;
+    this.dosunAvailable = false;
+    this.lastWinType = 'dosun';
+    this.lastRoundDeltas = deltas;
+
+    this.addLog(`${player.name} が「ドスン！」(合計${target}) で上がりました！(+${totalGain}点)`);
     return { success: true };
   }
 
@@ -425,6 +536,19 @@ class Room {
         this.lastDiscardPlayerId !== forPlayerId &&
         !me.furitenRanks.includes(this.lastDiscardCard.rank) &&
         canRon(me.hand, this.lastDiscardCard.rank)
+      ),
+      phase: this.phase,
+      dealerId: this.dealerId,
+      diceContenders: this.diceContenders,
+      diceRollPending: this.diceRollPending,
+      diceRolls: this.diceRolls,
+      canRollDice: this.phase === 'dice' && this.diceRollPending.includes(forPlayerId),
+      canDosun: !!(
+        this.started &&
+        !this.winnerId &&
+        this.dosunAvailable &&
+        me &&
+        canRon(me.hand, this.topCard.rank)
       ),
     };
   }

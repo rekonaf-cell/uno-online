@@ -94,6 +94,20 @@ document.getElementById('ronBtn').addEventListener('click', () => {
   socket.emit('ron');
 });
 
+document.getElementById('dosunBtn').addEventListener('click', () => {
+  socket.emit('dosun');
+});
+
+document.getElementById('rollDiceBtn').addEventListener('click', () => {
+  socket.emit('rollDice');
+});
+
+document.getElementById('submitHandSizeBtn').addEventListener('click', () => {
+  const size = parseInt(document.getElementById('handSizeInput').value, 10);
+  if (!Number.isInteger(size) || size < 3) return showToast('3枚以上の整数を指定してください');
+  socket.emit('chooseHandSize', { size });
+});
+
 document.querySelectorAll('.suit-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     const suit = btn.dataset.suit;
@@ -125,7 +139,8 @@ function render(state) {
   if (state.winnerId) {
     renderGame(state);
     const winner = state.players.find((p) => p.id === state.winnerId);
-    const winKindText = state.lastWinType === 'ron' ? '（ロン！）' : '';
+    const winKindText =
+      state.lastWinType === 'ron' ? '（ロン！）' : state.lastWinType === 'dosun' ? '（ドスン！）' : '';
     document.getElementById('winText').textContent = winner
       ? `${winner.name} の勝ち！🎉${winKindText}`
       : 'ゲーム終了';
@@ -156,6 +171,23 @@ function render(state) {
 
 function renderWaiting(state) {
   document.getElementById('roomCodeDisplay').textContent = state.code;
+
+  const lobbyContent = document.getElementById('lobbyWaitContent');
+  const diceContent = document.getElementById('diceWaitContent');
+  const handSizeContent = document.getElementById('handSizeWaitContent');
+  lobbyContent.classList.toggle('hidden', state.phase !== 'lobby');
+  diceContent.classList.toggle('hidden', state.phase !== 'dice');
+  handSizeContent.classList.toggle('hidden', state.phase !== 'handSize');
+
+  if (state.phase === 'dice') {
+    renderDicePhase(state);
+    return;
+  }
+  if (state.phase === 'handSize') {
+    renderHandSizePhase(state);
+    return;
+  }
+
   const list = document.getElementById('playerList');
   list.innerHTML = '';
   for (const p of state.players) {
@@ -167,6 +199,39 @@ function renderWaiting(state) {
   document.getElementById('startBtn').classList.toggle('hidden', !isHost);
   document.getElementById('waitingHint').classList.toggle('hidden', isHost);
   document.getElementById('startBtn').disabled = state.players.length < 2;
+}
+
+function renderDicePhase(state) {
+  const list = document.getElementById('diceResultList');
+  list.innerHTML = '';
+  for (const p of state.players) {
+    const roll = state.diceRolls[p.id];
+    const li = document.createElement('li');
+    if (roll) {
+      li.textContent = `${p.name}: 🎲${roll.d1}+${roll.d2} = ${roll.total}`;
+    } else if (state.diceRollPending.includes(p.id)) {
+      li.textContent = `${p.name}: 振っています…`;
+    } else {
+      li.textContent = `${p.name}: 対象外`;
+    }
+    list.appendChild(li);
+  }
+  const canRoll = state.canRollDice;
+  document.getElementById('rollDiceBtn').classList.toggle('hidden', !canRoll);
+  document.getElementById('diceHint').textContent = canRoll
+    ? '親を決めるサイコロを振ってください'
+    : '他のプレイヤーがサイコロを振るのを待っています…';
+}
+
+function renderHandSizePhase(state) {
+  const dealer = state.players.find((p) => p.id === state.dealerId);
+  const isDealer = state.dealerId === myId;
+  document.getElementById('dealerNameText').textContent = dealer
+    ? isDealer
+      ? 'あなたが親です。配る枚数を選んでください'
+      : `${dealer.name} が親です。枚数を選んでいます…`
+    : '';
+  document.getElementById('handSizeChooser').classList.toggle('hidden', !isDealer);
 }
 
 function renderGame(state) {
@@ -203,6 +268,8 @@ function renderGame(state) {
   if (state.pendingChain) {
     info += ` / ${state.pendingChain.rank}が連続中！ 引くと${state.pendingChain.amount}枚`;
   }
+  const dealer = state.players.find((p) => p.id === state.dealerId);
+  if (dealer) info += ` / 親: ${dealer.name}`;
   turnInfo.textContent = info;
 
   document.getElementById('myName').textContent = me ? `${me.name}(あなた) / ${me.score}点` : '';
@@ -232,6 +299,7 @@ function renderGame(state) {
   document.getElementById('endTurnBtn').classList.toggle('hidden', !isMyTurn || !state.pendingDraw);
   document.getElementById('pageOneBtn').classList.toggle('hidden', !state.canDeclarePageOne);
   document.getElementById('ronBtn').classList.toggle('hidden', !state.canRon);
+  document.getElementById('dosunBtn').classList.toggle('hidden', !state.canDosun);
 
   const logBox = document.getElementById('logBox');
   logBox.innerHTML = state.log.map((l) => `<div>${escapeHtml(l)}</div>`).join('');

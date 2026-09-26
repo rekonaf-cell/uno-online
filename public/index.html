@@ -22,10 +22,29 @@
     <!-- 待機室画面 -->
     <section id="waiting" class="screen hidden">
       <h2>部屋コード: <span id="roomCodeDisplay"></span></h2>
-      <p class="hint">このコードを友達に伝えて参加してもらいましょう</p>
-      <ul id="playerList"></ul>
-      <button id="startBtn" class="hidden">ゲーム開始</button>
-      <p id="waitingHint" class="hint">ホストの開始を待っています…</p>
+
+      <div id="lobbyWaitContent">
+        <p class="hint">このコードを友達に伝えて参加してもらいましょう</p>
+        <ul id="playerList"></ul>
+        <button id="startBtn" class="hidden">ゲーム開始</button>
+        <p id="waitingHint" class="hint">ホストの開始を待っています…</p>
+      </div>
+
+      <div id="diceWaitContent" class="hidden">
+        <h3>親を決めるサイコロ🎲</h3>
+        <ul id="diceResultList"></ul>
+        <button id="rollDiceBtn" class="hidden">サイコロを振る</button>
+        <p id="diceHint" class="hint"></p>
+      </div>
+
+      <div id="handSizeWaitContent" class="hidden">
+        <h3>配る枚数を決めます</h3>
+        <p id="dealerNameText" class="hint"></p>
+        <div id="handSizeChooser" class="hidden">
+          <input id="handSizeInput" type="number" min="3" value="7" />
+          <button id="submitHandSizeBtn">この枚数で配る</button>
+        </div>
+      </div>
     </section>
 
     <!-- ゲーム画面 -->
@@ -46,6 +65,7 @@
           <button id="endTurnBtn" class="hidden">ターン終了</button>
           <button id="pageOneBtn" class="hidden pageone-btn">ページワン！</button>
           <button id="ronBtn" class="hidden ron-btn">ロン！</button>
+          <button id="dosunBtn" class="hidden dosun-btn">ドスン！</button>
         </div>
       </div>
 

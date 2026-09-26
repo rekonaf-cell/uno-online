@@ -43,7 +43,7 @@ io.on('connection', (socket) => {
       socket.emit('errorMsg', '部屋が見つかりません');
       return;
     }
-    if (room.started) {
+    if (room.phase === 'dice' || room.phase === 'handSize' || room.phase === 'playing') {
       socket.emit('errorMsg', 'すでにゲームが始まっています');
       return;
     }
@@ -68,7 +68,44 @@ io.on('connection', (socket) => {
       socket.emit('errorMsg', '2人以上必要です');
       return;
     }
-    room.start();
+    const result = room.beginRound();
+    if (result.error) {
+      socket.emit('errorMsg', result.error);
+      return;
+    }
+    broadcastState(room);
+  });
+
+  socket.on('rollDice', () => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room) return;
+    const result = room.rollDice(socket.id);
+    if (result.error) {
+      socket.emit('errorMsg', result.error);
+      return;
+    }
+    broadcastState(room);
+  });
+
+  socket.on('chooseHandSize', ({ size }) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room) return;
+    const result = room.chooseHandSize(socket.id, size);
+    if (result.error) {
+      socket.emit('errorMsg', result.error);
+      return;
+    }
+    broadcastState(room);
+  });
+
+  socket.on('dosun', () => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || !room.started) return;
+    const result = room.dosun(socket.id);
+    if (result.error) {
+      socket.emit('errorMsg', result.error);
+      return;
+    }
     broadcastState(room);
   });
 

@@ -228,6 +228,43 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .pageone-btn { background: #d21f1f; }
 .ron-btn { background: #b8860b; }
+.dosun-btn { background: #8e2de2; }
+
+#diceResultList,
+#roundResultList {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  text-align: left;
+  font-size: 14px;
+  width: 100%;
+  max-width: 320px;
+}
+#diceResultList li {
+  background: var(--panel);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin: 6px 0;
+}
+
+#handSizeChooser {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  max-width: 320px;
+  margin: 0 auto;
+}
+#handSizeChooser input {
+  width: 90px;
+  margin: 0;
+  text-align: center;
+}
+#handSizeChooser button {
+  width: auto;
+  flex: 1;
+  margin: 0;
+}
 
 .opponent .tag {
   font-size: 10px;
