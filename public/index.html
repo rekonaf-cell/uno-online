@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>UNO Online</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- ロビー画面 -->
+    <section id="lobby" class="screen">
+      <h1>UNO Online</h1>
+      <input id="nameInput" type="text" placeholder="ニックネーム" maxlength="12" />
+      <button id="createBtn">部屋を作る</button>
+      <div class="divider">または</div>
+      <input id="codeInput" type="text" inputmode="numeric" placeholder="部屋コード(4桁)" maxlength="4" />
+      <button id="joinBtn">参加する</button>
+      <p id="lobbyError" class="error"></p>
+    </section>
+
+    <!-- 待機室画面 -->
+    <section id="waiting" class="screen hidden">
+      <h2>部屋コード: <span id="roomCodeDisplay"></span></h2>
+      <p class="hint">このコードを友達に伝えて参加してもらいましょう</p>
+      <ul id="playerList"></ul>
+      <button id="startBtn" class="hidden">ゲーム開始</button>
+      <p id="waitingHint" class="hint">ホストの開始を待っています…</p>
+    </section>
+
+    <!-- ゲーム画面 -->
+    <section id="game" class="screen hidden">
+      <div id="opponents"></div>
+
+      <div id="table">
+        <div class="deck-pile" id="drawPile">山札 <span id="deckCount"></span></div>
+        <div id="discardTop" class="card"></div>
+        <div id="turnInfo"></div>
+      </div>
+
+      <div id="myArea">
+        <div id="myName"></div>
+        <div id="hand"></div>
+        <div id="actions">
+          <button id="drawBtn" class="hidden">カードを引く</button>
+          <button id="endTurnBtn" class="hidden">ターン終了</button>
+        </div>
+      </div>
+
+      <div id="logBox"></div>
+    </section>
+
+    <!-- 色選択モーダル -->
+    <div id="colorModal" class="modal hidden">
+      <div class="modal-content">
+        <p>色を選んでください</p>
+        <div class="color-choices">
+          <button data-color="red" class="color-btn red"></button>
+          <button data-color="yellow" class="color-btn yellow"></button>
+          <button data-color="green" class="color-btn green"></button>
+          <button data-color="blue" class="color-btn blue"></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 勝利モーダル -->
+    <div id="winModal" class="modal hidden">
+      <div class="modal-content">
+        <p id="winText"></p>
+        <button id="backToLobbyBtn">部屋に戻る</button>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
