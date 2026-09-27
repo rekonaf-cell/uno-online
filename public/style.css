@@ -177,6 +177,43 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   padding: 0 8px;
 }
 
+#historyArea { padding: 4px 0; }
+.history-label {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 0 4px 2px;
+}
+#historyStrip {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 2px 4px 6px;
+  -webkit-overflow-scrolling: touch;
+}
+.history-card {
+  width: 32px;
+  height: 46px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 11px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.history-card.red-suit,
+.history-card.black-suit {
+  background: #f5f0e6;
+}
+.history-card.red-suit { color: #d21f1f; }
+.history-card.black-suit { color: #1a1a1a; }
+.history-card.joker {
+  background: linear-gradient(135deg, var(--red), var(--yellow), var(--green), var(--blue));
+  color: white;
+  font-size: 8px;
+}
+
 #myArea { padding: 8px 0; }
 #myName { text-align: center; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
 

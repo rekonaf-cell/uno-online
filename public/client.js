@@ -271,6 +271,17 @@ function renderGame(state) {
   }
   document.getElementById('deckCount').textContent = state.deckCount;
 
+  const historyStrip = document.getElementById('historyStrip');
+  historyStrip.innerHTML = '';
+  const history = state.discardHistory || [];
+  for (let i = history.length - 1; i >= 0; i--) {
+    const card = history[i];
+    const div = document.createElement('div');
+    div.className = 'history-card ' + cardColorClass(card);
+    div.textContent = cardLabel(card);
+    historyStrip.appendChild(div);
+  }
+
   const isMyTurn = state.currentPlayerId === myId;
   const turnInfo = document.getElementById('turnInfo');
   let info = '';

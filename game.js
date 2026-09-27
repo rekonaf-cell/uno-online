@@ -106,6 +106,7 @@ class Room {
     this.lastWinType = null; // 'normal' | 'ron' | 'dosun'
     this.lastRoundDeltas = null; // { [playerId]: pointChange }
     this.log = [];
+    this.discardHistory = []; // every card played this round, in order, never trimmed by reshuffles
 
     this.phase = 'lobby'; // 'lobby' | 'dice' | 'handSize' | 'playing' | 'roundEnd'
     this.dealerId = null;
@@ -124,6 +125,7 @@ class Room {
       hand: [],
       connected: true,
       declaredPageOne: false,
+      pageOneDeadline: null, // discardHistory.length snapshot; declaring is only valid until it moves
       score: 0,
       furitenRanks: [],
       isBot,
@@ -178,10 +180,12 @@ class Room {
     this.lastWinType = null;
     this.lastRoundDeltas = null;
     this.log = [];
+    this.discardHistory = [];
 
     for (const player of this.players) {
       player.hand = this.deck.splice(0, handSize);
       player.declaredPageOne = false;
+      player.pageOneDeadline = null;
       player.furitenRanks = [];
     }
 
@@ -192,6 +196,7 @@ class Room {
       firstCard = this.deck.pop();
     }
     this.discardPile.push(firstCard);
+    this.discardHistory.push(firstCard);
     this.currentSuit = firstCard.suit;
     this.dosunAvailable = true;
 
@@ -211,6 +216,9 @@ class Room {
   // Kicks off the pre-round sequence: a dice-off to pick the very first
   // dealer, or (once a dealer already exists) straight to hand-size choice.
   beginRound() {
+    this.winnerId = null;
+    this.lastWinType = null;
+    this.lastRoundDeltas = null;
     if (this.dealerId === null) {
       const contenders = this.players.filter((p) => p.connected).map((p) => p.id);
       if (contenders.length < 2) return { error: '2人以上必要です' };
@@ -329,6 +337,7 @@ class Room {
 
     player.hand.splice(cardIndex, 1);
     this.discardPile.push(card);
+    this.discardHistory.push(card);
     this.pendingDraw = false;
 
     if (player.hand.length === 0) {
@@ -377,6 +386,7 @@ class Room {
 
     if (player.hand.length === 1 && card.type !== 'joker' && card.rank !== 8) {
       player.declaredPageOne = false; // must declare fresh
+      player.pageOneDeadline = this.discardHistory.length; // must declare before anyone else plays next
     }
 
     if (card.type === 'joker' || card.rank === 8) {
@@ -514,6 +524,9 @@ class Room {
     if (card.type === 'joker' || card.rank === 8) {
       return { error: 'ジョーカー・8では宣言できません' };
     }
+    if (player.pageOneDeadline !== this.discardHistory.length) {
+      return { error: 'タイミングを逃しました(次の人が出す前に宣言してください)' };
+    }
     player.declaredPageOne = true;
     this.addLog(`${player.name} が「ページワン！」と宣言しました`);
     return { success: true };
@@ -534,6 +547,7 @@ class Room {
       topCard: this.topCard || null,
       deckCount: this.deck.length,
       log: this.log,
+      discardHistory: this.discardHistory,
       players: this.players.map((p) => ({
         id: p.id,
         name: p.name,
@@ -552,7 +566,8 @@ class Room {
         me.hand.length === 1 &&
         !me.declaredPageOne &&
         me.hand[0].type !== 'joker' &&
-        me.hand[0].rank !== 8
+        me.hand[0].rank !== 8 &&
+        me.pageOneDeadline === this.discardHistory.length
       ),
       canRon: !!(
         this.started &&
