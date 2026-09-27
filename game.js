@@ -559,9 +559,12 @@ class Room {
     const winners = this.ronClaimants;
     const deltas = {};
     let discarderLoss = 0;
+    // The discarded card itself is back in play for scoring: the discarder
+    // pays as if it were still in their hand, not as if it had already left.
+    const discarderScoringHand = [...discarder.hand, this.lastDiscardCard];
     for (const winnerId of winners) {
       const winner = this.players.find((p) => p.id === winnerId);
-      const pts = handScore(discarder.hand) * 2;
+      const pts = handScore(discarderScoringHand) * 2;
       winner.score += pts;
       deltas[winnerId] = (deltas[winnerId] || 0) + pts;
       discarderLoss += pts;
