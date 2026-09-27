@@ -326,6 +326,9 @@ class Room {
       player.hand.push(this.deck.pop());
       drawn++;
     }
+    // A ページワン declaration only makes sense at exactly 1 card; growing
+    // back to 2+ (a chain penalty, a forced draw) clears it automatically.
+    if (player.hand.length > 1) player.declaredPageOne = false;
     return drawn;
   }
 
