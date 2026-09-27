@@ -156,6 +156,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 
 .card {
+  position: relative;
   width: 64px;
   height: 92px;
   border-radius: 10px;
@@ -169,6 +170,18 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   flex-shrink: 0;
   user-select: none;
   border: 2px solid rgba(255,255,255,0.2);
+  transition: transform 0.15s ease;
+}
+
+/* Corner index stays readable even when most of the card is covered by
+   the next card overlapping it in the fanned hand. */
+.card .corner {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1;
 }
 
 .card.red-suit,
@@ -183,8 +196,16 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   font-size: 14px;
 }
 
-.card.playable { transform: translateY(-10px); box-shadow: 0 0 0 3px white, 0 4px 10px rgba(0,0,0,0.5); }
+.card.playable { box-shadow: 0 0 0 3px white, 0 4px 10px rgba(0,0,0,0.5); }
 .card.unplayable { filter: brightness(0.6); }
+
+/* Tapped card in a fanned/overlapping hand rises above its neighbors so
+   it can be seen and confirmed before a second tap plays it. */
+.card.raised {
+  transform: translateY(-22px);
+  z-index: 999;
+  box-shadow: 0 0 0 3px var(--yellow), 0 10px 16px rgba(0,0,0,0.5);
+}
 
 #turnInfo {
   position: absolute;
@@ -247,9 +268,9 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 #hand {
   display: flex;
-  gap: 6px;
+  gap: 0;
   overflow-x: auto;
-  padding: 8px 4px 16px;
+  padding: 10px 4px 16px 4px;
   -webkit-overflow-scrolling: touch;
 }
 

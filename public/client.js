@@ -14,6 +14,11 @@ function showScreen(name) {
 
 let myId = null;
 let pendingSuitCardId = null;
+let raisedCardId = null; // fanned hand: card the player tapped to preview before playing
+
+const HAND_CARD_WIDTH = 64;
+const HAND_CARD_GAP = 6;
+const HAND_MIN_PEEK = 26; // narrowest sliver a covered card can be overlapped down to
 
 const suitSymbols = { spade: '♠', heart: '♥', diamond: '♦', club: '♣' };
 const suitNames = { spade: 'スペード', heart: 'ハート', diamond: 'ダイヤ', club: 'クラブ' };
@@ -339,15 +344,39 @@ function renderGame(state) {
   const handDiv = document.getElementById('hand');
   handDiv.innerHTML = '';
   const hand = state.myHand || [];
-  for (const card of hand) {
+  if (!hand.some((c) => c.id === raisedCardId)) raisedCardId = null;
+
+  // Fan the hand: cards overlap just enough to fit the visible width, so a
+  // large hand stays scannable instead of forcing a long horizontal scroll.
+  const containerWidth = handDiv.clientWidth || window.innerWidth - 32;
+  const idealStep = HAND_CARD_WIDTH + HAND_CARD_GAP;
+  const idealTotal = HAND_CARD_WIDTH + (hand.length - 1) * idealStep;
+  let step = idealStep;
+  if (hand.length > 1 && idealTotal > containerWidth) {
+    step = Math.max(HAND_MIN_PEEK, (containerWidth - HAND_CARD_WIDTH) / (hand.length - 1));
+  }
+
+  hand.forEach((card, index) => {
     const canPlay = isMyTurn && !state.pendingDraw && cardCanPlay(card, state.topCard, state.currentSuit, state.pendingChain);
+    const isRaised = card.id === raisedCardId;
     const div = document.createElement('div');
-    div.className = 'card ' + cardColorClass(card) + ' ' + (canPlay ? 'playable' : 'unplayable');
-    div.textContent = cardLabel(card);
+    div.className =
+      'card ' + cardColorClass(card) + ' ' + (canPlay ? 'playable' : 'unplayable') + (isRaised ? ' raised' : '');
+    if (index > 0) div.style.marginLeft = (step - HAND_CARD_WIDTH) + 'px';
+    div.innerHTML = `<span class="corner">${historyCardLabel(card)}</span>${cardLabel(card)}`;
     div.addEventListener('click', () => {
+      if (!isRaised) {
+        // First tap on a fanned card just brings it forward so it can be
+        // seen clearly; this works any time, even outside your turn, so
+        // the hand stays browsable. Only the second tap attempts to play it.
+        raisedCardId = card.id;
+        renderGame(state);
+        return;
+      }
       if (waitingForOthers) return showToast('他のプレイヤーの確認待ちです');
       if (!isMyTurn || state.pendingDraw) return showToast('今は出せません');
       if (!cardCanPlay(card, state.topCard, state.currentSuit, state.pendingChain)) return showToast('出せないカードです');
+      raisedCardId = null;
       if (card.type === 'joker' || card.rank === 8) {
         pendingSuitCardId = card.id;
         document.getElementById('suitModal').classList.remove('hidden');
@@ -356,7 +385,7 @@ function renderGame(state) {
       }
     });
     handDiv.appendChild(div);
-  }
+  });
 
   document.getElementById('drawBtn').classList.toggle('hidden', !isMyTurn || state.pendingDraw);
   document.getElementById('endTurnBtn').classList.toggle('hidden', !isMyTurn || !state.pendingDraw);
