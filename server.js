@@ -50,6 +50,11 @@ function findNextBotStep(room) {
       );
       if (bot) return { type: 'ron', playerId: bot.id };
     }
+    if (room.awaitingPassFrom.length > 0) {
+      const botId = room.awaitingPassFrom.find((id) => room.players.find((p) => p.id === id)?.isBot);
+      if (botId) return { type: 'pass', playerId: botId };
+      return null; // waiting on a human to pass; nothing a bot can do yet
+    }
     const current = room.currentPlayer;
     if (current && current.isBot) {
       return { type: room.pendingDraw ? 'afterDraw' : 'turn', playerId: current.id };
@@ -91,6 +96,9 @@ function performBotStep(room, step) {
       break;
     case 'ron':
       room.ron(bot.id);
+      break;
+    case 'pass':
+      room.pass(bot.id);
       break;
     case 'rollDice':
       room.rollDice(bot.id);
@@ -247,6 +255,17 @@ io.on('connection', (socket) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || !room.started) return;
     const result = room.playCard(socket.id, cardId, chosenSuit);
+    if (result.error) {
+      socket.emit('errorMsg', result.error);
+      return;
+    }
+    broadcastState(room);
+  });
+
+  socket.on('pass', () => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || !room.started) return;
+    const result = room.pass(socket.id);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;

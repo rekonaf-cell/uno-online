@@ -107,6 +107,10 @@ document.getElementById('dosunBtn').addEventListener('click', () => {
   socket.emit('dosun');
 });
 
+document.getElementById('passBtn').addEventListener('click', () => {
+  socket.emit('pass');
+});
+
 document.getElementById('rollDiceBtn').addEventListener('click', () => {
   socket.emit('rollDice');
 });
@@ -295,10 +299,19 @@ function renderGame(state) {
     historyStrip.appendChild(div);
   }
 
-  const isMyTurn = state.currentPlayerId === myId;
+  const awaitingPassFrom = state.awaitingPassFrom || [];
+  const waitingForOthers = awaitingPassFrom.length > 0;
+  const isMyTurn = state.currentPlayerId === myId && !waitingForOthers;
   const turnInfo = document.getElementById('turnInfo');
   let info = '';
-  if (isMyTurn) {
+  if (waitingForOthers) {
+    const names = awaitingPassFrom
+      .map((id) => state.players.find((p) => p.id === id))
+      .filter(Boolean)
+      .map((p) => p.name)
+      .join('・');
+    info = `${names} の確認待ち(通す/ロン/ドスン)`;
+  } else if (state.currentPlayerId === myId) {
     info = 'あなたの番です';
   } else {
     const cp = state.players.find((p) => p.id === state.currentPlayerId);
@@ -323,6 +336,7 @@ function renderGame(state) {
     div.className = 'card ' + cardColorClass(card) + ' ' + (canPlay ? 'playable' : 'unplayable');
     div.textContent = cardLabel(card);
     div.addEventListener('click', () => {
+      if (waitingForOthers) return showToast('他のプレイヤーの確認待ちです');
       if (!isMyTurn || state.pendingDraw) return showToast('今は出せません');
       if (!cardCanPlay(card, state.topCard, state.currentSuit, state.pendingChain)) return showToast('出せないカードです');
       if (card.type === 'joker' || card.rank === 8) {
@@ -340,6 +354,7 @@ function renderGame(state) {
   document.getElementById('pageOneBtn').classList.toggle('hidden', !state.canDeclarePageOne);
   document.getElementById('ronBtn').classList.toggle('hidden', !state.canRon);
   document.getElementById('dosunBtn').classList.toggle('hidden', !state.canDosun);
+  document.getElementById('passBtn').classList.toggle('hidden', !state.canPass);
 
   const logBox = document.getElementById('logBox');
   logBox.innerHTML = state.log.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
@@ -348,7 +363,7 @@ function renderGame(state) {
 
 function cardCanPlay(card, topCard, currentSuit, pendingChain) {
   if (pendingChain) {
-    return card.rank === pendingChain.rank;
+    return card.rank === pendingChain.rank || card.type === 'joker';
   }
   if (!topCard) return true;
   if (card.type === 'joker') return true;

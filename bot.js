@@ -47,8 +47,14 @@ function choosePlay(playable, bot) {
 // What should a bot do on its own turn, before drawing?
 function decideTurnAction(room, bot) {
   if (room.pendingChain) {
-    const match = bot.hand.find((c) => c.rank === room.pendingChain.rank);
-    if (match) return { action: 'play', cardId: match.id };
+    const rankMatch = bot.hand.find((c) => c.rank === room.pendingChain.rank);
+    if (rankMatch) return { action: 'play', cardId: rankMatch.id };
+    // A joker can answer the chain too, but never as a lone last card —
+    // that would be an illegal "win" with a joker.
+    const jokerMatch = bot.hand.length > 1 ? bot.hand.find((c) => c.type === 'joker') : null;
+    if (jokerMatch) {
+      return { action: 'play', cardId: jokerMatch.id, chosenSuit: pickSuit(bot.hand, jokerMatch.id) };
+    }
     return { action: 'draw' };
   }
 

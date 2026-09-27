@@ -115,6 +115,9 @@ class Room {
     this.diceRollPending = [];
     this.dosunAvailable = false;
     this.botCounter = 0;
+
+    this.awaitingPassFrom = []; // player ids who still must pass/ron/dosun before the pending turn effect resolves
+    this.pendingResolve = null; // closure that applies the deferred turn effect once everyone has passed
   }
 
   addPlayer(id, name, isBot = false) {
@@ -181,6 +184,8 @@ class Room {
     this.lastRoundDeltas = null;
     this.log = [];
     this.discardHistory = [];
+    this.awaitingPassFrom = [];
+    this.pendingResolve = null;
 
     for (const player of this.players) {
       player.hand = this.deck.splice(0, handSize);
@@ -202,14 +207,24 @@ class Room {
 
     this.addLog(`ゲーム開始！(${handSize}枚配り) 最初の場札は${describeCard(firstCard)}`);
 
-    if (firstCard.rank === 11) {
-      this.direction = -1;
-    } else if (firstCard.rank === 1) {
-      this.advanceTurn();
-    } else if (firstCard.rank === 2) {
-      this.pendingChain = { rank: 2, amount: 2 };
-    } else if (firstCard.rank === 3) {
-      this.pendingChain = { rank: 3, amount: 3 };
+    // Give everyone a chance to hit the opening card with ドスン before the
+    // first turn's effect (skip/reverse/chain) actually takes hold.
+    this.pendingResolve = () => {
+      if (firstCard.rank === 11) {
+        this.direction = -1;
+      } else if (firstCard.rank === 1) {
+        this.advanceTurn();
+      } else if (firstCard.rank === 2) {
+        this.pendingChain = { rank: 2, amount: 2 };
+      } else if (firstCard.rank === 3) {
+        this.pendingChain = { rank: 3, amount: 3 };
+      }
+    };
+    this.awaitingPassFrom = this.players.filter((p) => p.connected).map((p) => p.id);
+    if (this.awaitingPassFrom.length === 0) {
+      const resolve = this.pendingResolve;
+      this.pendingResolve = null;
+      resolve();
     }
   }
 
@@ -303,6 +318,7 @@ class Room {
   }
 
   playCard(playerId, cardId, chosenSuit) {
+    if (this.awaitingPassFrom.length > 0) return { error: '他のプレイヤーの確認待ちです' };
     const playerIndex = this.players.findIndex((p) => p.id === playerId);
     if (playerIndex !== this.currentPlayerIndex) return { error: 'あなたの番ではありません' };
     const player = this.players[playerIndex];
@@ -314,8 +330,8 @@ class Room {
     const card = player.hand[cardIndex];
 
     if (this.pendingChain) {
-      if (card.rank !== this.pendingChain.rank) {
-        return { error: `${this.pendingChain.rank}のカードで対応するか、引いてください` };
+      if (card.type !== 'joker' && card.rank !== this.pendingChain.rank) {
+        return { error: `${this.pendingChain.rank}かジョーカーで対応するか、引いてください` };
       }
     } else if (!cardMatches(card, this.topCard, this.currentSuit)) {
       return { error: '出せないカードです' };
@@ -384,41 +400,62 @@ class Room {
     this.lastDiscardCard = card.type === 'normal' ? card : null;
     this.lastDiscardPlayerId = player.id;
 
-    if (player.hand.length === 1 && card.type !== 'joker' && card.rank !== 8) {
+    if (player.hand.length === 1 && player.hand[0].type !== 'joker' && player.hand[0].rank !== 8) {
+      // Eligibility to declare depends on the card THEY'D be winning with
+      // (the one now left in hand), not the card they just played.
       player.declaredPageOne = false; // must declare fresh
       player.pageOneDeadline = this.discardHistory.length; // must declare before anyone else plays next
     }
 
-    if (card.type === 'joker' || card.rank === 8) {
-      this.currentSuit = chosenSuit;
-      this.pendingChain = null;
-      this.advanceTurn();
-    } else {
-      this.currentSuit = card.suit;
-      if (card.rank === 1) {
-        this.pendingChain = null;
-        this.advanceTurn(2);
-      } else if (card.rank === 2) {
-        this.pendingChain = { rank: 2, amount: (this.pendingChain ? this.pendingChain.amount : 0) + 2 };
+    // Defer the actual turn effect (suit change / skip / reverse / chain)
+    // until everyone else has had a chance to ron or explicitly pass.
+    this.pendingResolve = () => {
+      const chainActive = this.pendingChain;
+      if (card.type === 'joker' && chainActive) {
+        // Joker used to answer a 2/3 chain: extends it like a real card of
+        // that rank would, rather than cancelling it.
+        this.currentSuit = chosenSuit;
+        this.pendingChain = { rank: chainActive.rank, amount: chainActive.amount + chainActive.rank };
         this.advanceTurn();
-      } else if (card.rank === 3) {
-        this.pendingChain = { rank: 3, amount: (this.pendingChain ? this.pendingChain.amount : 0) + 3 };
-        this.advanceTurn();
-      } else if (card.rank === 11) {
+      } else if (card.type === 'joker' || card.rank === 8) {
+        this.currentSuit = chosenSuit;
         this.pendingChain = null;
-        this.direction *= -1;
-        if (this.players.length === 2) this.advanceTurn();
         this.advanceTurn();
       } else {
-        this.pendingChain = null;
-        this.advanceTurn();
+        this.currentSuit = card.suit;
+        if (card.rank === 1) {
+          this.pendingChain = null;
+          this.advanceTurn(2);
+        } else if (card.rank === 2) {
+          this.pendingChain = { rank: 2, amount: (this.pendingChain ? this.pendingChain.amount : 0) + 2 };
+          this.advanceTurn();
+        } else if (card.rank === 3) {
+          this.pendingChain = { rank: 3, amount: (this.pendingChain ? this.pendingChain.amount : 0) + 3 };
+          this.advanceTurn();
+        } else if (card.rank === 11) {
+          this.pendingChain = null;
+          this.direction *= -1;
+          if (this.players.length === 2) this.advanceTurn();
+          this.advanceTurn();
+        } else {
+          this.pendingChain = null;
+          this.advanceTurn();
+        }
       }
+    };
+
+    this.awaitingPassFrom = this.players.filter((p) => p.id !== player.id && p.connected).map((p) => p.id);
+    if (this.awaitingPassFrom.length === 0) {
+      const resolve = this.pendingResolve;
+      this.pendingResolve = null;
+      resolve();
     }
 
     return { success: true };
   }
 
   draw(playerId) {
+    if (this.awaitingPassFrom.length > 0) return { error: '他のプレイヤーの確認待ちです' };
     const playerIndex = this.players.findIndex((p) => p.id === playerId);
     if (playerIndex !== this.currentPlayerIndex) return { error: 'あなたの番ではありません' };
     const player = this.players[playerIndex];
@@ -438,6 +475,22 @@ class Room {
     this.drawCards(player, 1);
     this.pendingDraw = true;
     this.addLog(`${player.name} が山札から1枚引きました`);
+    return { success: true };
+  }
+
+  // A player declines to ron the current discard (or dosun the opening
+  // card). Once everyone who was asked has passed, the deferred turn
+  // effect from the triggering play finally resolves.
+  pass(playerId) {
+    if (!this.awaitingPassFrom.includes(playerId)) {
+      return { error: '通す必要はありません' };
+    }
+    this.awaitingPassFrom = this.awaitingPassFrom.filter((id) => id !== playerId);
+    if (this.awaitingPassFrom.length === 0 && this.pendingResolve) {
+      const resolve = this.pendingResolve;
+      this.pendingResolve = null;
+      resolve();
+    }
     return { success: true };
   }
 
@@ -472,6 +525,8 @@ class Room {
     this.dealerId = player.id;
     this.lastDiscardCard = null;
     this.lastDiscardPlayerId = null;
+    this.awaitingPassFrom = [];
+    this.pendingResolve = null;
 
     discarder.score -= pts;
     player.score += pts;
@@ -509,6 +564,8 @@ class Room {
     this.phase = 'roundEnd';
     this.dealerId = player.id;
     this.dosunAvailable = false;
+    this.awaitingPassFrom = [];
+    this.pendingResolve = null;
     this.lastWinType = 'dosun';
     this.lastRoundDeltas = deltas;
 
@@ -591,6 +648,8 @@ class Room {
         me &&
         canRon(me.hand, this.topCard.rank)
       ),
+      awaitingPassFrom: this.awaitingPassFrom,
+      canPass: this.awaitingPassFrom.includes(forPlayerId),
     };
   }
 }
