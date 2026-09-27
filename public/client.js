@@ -14,6 +14,9 @@ function showScreen(name) {
 
 let myId = null;
 let pendingSuitCardId = null;
+let pendingIsJoker = false;
+let pendingChosenSuit = null;
+let pendingChosenRank = null;
 let raisedCardId = null; // fanned hand: card the player tapped to preview before playing
 
 const HAND_CARD_WIDTH = 64;
@@ -33,12 +36,18 @@ function rankLabel(rank) {
 }
 
 function cardLabel(card) {
-  if (card.type === 'joker') return 'JOKER';
+  if (card.type === 'joker') {
+    // Once played, a joker carries the number/suit the player declared for
+    // it; keep the rainbow joker background but show that value instead.
+    return card.chosenRank ? `${suitSymbols[card.chosenSuit]}${rankLabel(card.chosenRank)}` : 'JOKER';
+  }
   return `${suitSymbols[card.suit]}${rankLabel(card.rank)}`;
 }
 
 function historyCardLabel(card) {
-  if (card.type === 'joker') return 'JK';
+  if (card.type === 'joker') {
+    return card.chosenRank ? `${suitSymbols[card.chosenSuit]}${rankLabel(card.chosenRank)}` : 'JK';
+  }
   return `${suitSymbols[card.suit]}${rankLabel(card.rank)}`;
 }
 
@@ -122,20 +131,64 @@ document.getElementById('rollDiceBtn').addEventListener('click', () => {
   socket.emit('rollDice');
 });
 
+document.querySelectorAll('.hand-size-btn[data-size]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.getElementById('handSizeCustom').classList.add('hidden');
+    socket.emit('chooseHandSize', { size: Number(btn.dataset.size) });
+  });
+});
+
+document.getElementById('handSizeOtherBtn').addEventListener('click', () => {
+  document.getElementById('handSizeCustom').classList.remove('hidden');
+  document.getElementById('handSizeInput').focus();
+});
+
 document.getElementById('submitHandSizeBtn').addEventListener('click', () => {
   const size = parseInt(document.getElementById('handSizeInput').value, 10);
   if (!Number.isInteger(size) || size < 3) return showToast('3枚以上の整数を指定してください');
   socket.emit('chooseHandSize', { size });
 });
 
+const rankChoicesDiv = document.getElementById('rankChoices');
+for (let rank = 1; rank <= 13; rank++) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'rank-btn';
+  btn.textContent = rankLabel(rank);
+  btn.dataset.rank = rank;
+  btn.addEventListener('click', () => {
+    pendingChosenRank = rank;
+    rankChoicesDiv.querySelectorAll('.rank-btn').forEach((b) => b.classList.toggle('selected', Number(b.dataset.rank) === rank));
+    tryEmitPendingPlay();
+  });
+  rankChoicesDiv.appendChild(btn);
+}
+
+function resetPendingSuitModal() {
+  document.getElementById('suitModal').classList.add('hidden');
+  document.getElementById('rankChooser').classList.add('hidden');
+  rankChoicesDiv.querySelectorAll('.rank-btn').forEach((b) => b.classList.remove('selected'));
+  pendingSuitCardId = null;
+  pendingIsJoker = false;
+  pendingChosenSuit = null;
+  pendingChosenRank = null;
+}
+
+function tryEmitPendingPlay() {
+  if (pendingSuitCardId === null || pendingChosenSuit === null) return;
+  if (pendingIsJoker && pendingChosenRank === null) return;
+  socket.emit('playCard', {
+    cardId: pendingSuitCardId,
+    chosenSuit: pendingChosenSuit,
+    chosenRank: pendingIsJoker ? pendingChosenRank : undefined,
+  });
+  resetPendingSuitModal();
+}
+
 document.querySelectorAll('.suit-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
-    const suit = btn.dataset.suit;
-    document.getElementById('suitModal').classList.add('hidden');
-    if (pendingSuitCardId !== null) {
-      socket.emit('playCard', { cardId: pendingSuitCardId, chosenSuit: suit });
-      pendingSuitCardId = null;
-    }
+    pendingChosenSuit = btn.dataset.suit;
+    tryEmitPendingPlay();
   });
 });
 
@@ -272,6 +325,7 @@ function renderHandSizePhase(state) {
       : `${dealer.name} が親です。枚数を選んでいます…`
     : '';
   document.getElementById('handSizeChooser').classList.toggle('hidden', !isDealer);
+  document.getElementById('handSizeCustom').classList.add('hidden');
 }
 
 function renderGame(state) {
@@ -303,8 +357,9 @@ function renderGame(state) {
   const historyStrip = document.getElementById('historyStrip');
   historyStrip.innerHTML = '';
   const history = state.discardHistory || [];
+  const HISTORY_DISPLAY_LIMIT = 5;
   let zIndex = history.length;
-  for (let i = history.length - 1; i >= 0; i--) {
+  for (let i = history.length - 1; i >= Math.max(0, history.length - HISTORY_DISPLAY_LIMIT); i--) {
     const card = history[i];
     const div = document.createElement('div');
     div.className = 'history-card ' + cardColorClass(card);
@@ -387,7 +442,11 @@ function renderGame(state) {
       raisedCardId = null;
       if (card.type === 'joker' || card.rank === 8) {
         pendingSuitCardId = card.id;
+        pendingIsJoker = card.type === 'joker';
+        pendingChosenSuit = null;
+        pendingChosenRank = null;
         document.getElementById('suitModal').classList.remove('hidden');
+        document.getElementById('rankChooser').classList.toggle('hidden', !pendingIsJoker);
       } else {
         socket.emit('playCard', { cardId: card.id });
       }

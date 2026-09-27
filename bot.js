@@ -10,6 +10,12 @@ function priorityValue(card) {
   return card.rank;
 }
 
+// A joker played to the discard now needs a declared number too. No
+// opponent info to reason from, so just pick something unpredictable.
+function pickRank() {
+  return 1 + Math.floor(Math.random() * 13);
+}
+
 function pickSuit(hand, excludeCardId) {
   const counts = { spade: 0, heart: 0, diamond: 0, club: 0 };
   for (const c of hand) {
@@ -50,7 +56,15 @@ function choosePlay(playable, bot) {
   pool.sort((a, b) => priorityValue(b) - priorityValue(a));
   const chosen = pool[0];
 
-  if (chosen.type === 'joker' || chosen.rank === 8) {
+  if (chosen.type === 'joker') {
+    return {
+      action: 'play',
+      cardId: chosen.id,
+      chosenSuit: pickSuit(bot.hand, chosen.id),
+      chosenRank: pickRank(),
+    };
+  }
+  if (chosen.rank === 8) {
     return { action: 'play', cardId: chosen.id, chosenSuit: pickSuit(bot.hand, chosen.id) };
   }
   return { action: 'play', cardId: chosen.id };
@@ -65,7 +79,12 @@ function decideTurnAction(room, bot) {
     // that would be an illegal "win" with a joker.
     const jokerMatch = bot.hand.length > 1 ? bot.hand.find((c) => c.type === 'joker') : null;
     if (jokerMatch) {
-      return { action: 'play', cardId: jokerMatch.id, chosenSuit: pickSuit(bot.hand, jokerMatch.id) };
+      return {
+        action: 'play',
+        cardId: jokerMatch.id,
+        chosenSuit: pickSuit(bot.hand, jokerMatch.id),
+        chosenRank: pickRank(),
+      };
     }
     return { action: 'draw' };
   }

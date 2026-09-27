@@ -42,8 +42,16 @@
         <h3>配る枚数を決めます</h3>
         <p id="dealerNameText" class="hint"></p>
         <div id="handSizeChooser" class="hidden">
-          <input id="handSizeInput" type="number" min="3" value="7" />
-          <button id="submitHandSizeBtn">この枚数で配る</button>
+          <div id="handSizePresets" class="hand-size-presets">
+            <button type="button" class="hand-size-btn" data-size="3">3枚</button>
+            <button type="button" class="hand-size-btn" data-size="4">4枚</button>
+            <button type="button" class="hand-size-btn" data-size="5">5枚</button>
+            <button type="button" id="handSizeOtherBtn" class="hand-size-btn">その他</button>
+          </div>
+          <div id="handSizeCustom" class="hidden">
+            <input id="handSizeInput" type="number" min="3" value="7" />
+            <button id="submitHandSizeBtn">この枚数で配る</button>
+          </div>
         </div>
       </div>
     </section>
@@ -90,6 +98,10 @@
           <button data-suit="heart" class="suit-btn red">♥</button>
           <button data-suit="diamond" class="suit-btn red">♦</button>
           <button data-suit="club" class="suit-btn black">♣</button>
+        </div>
+        <div id="rankChooser" class="hidden">
+          <p>数字を選んでください(ジョーカーが扱う数字)</p>
+          <div id="rankChoices" class="rank-choices"></div>
         </div>
       </div>
     </div>

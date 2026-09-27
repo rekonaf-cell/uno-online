@@ -83,8 +83,20 @@ function rankLabel(rank) {
 const suitNames = { spade: 'スペード', heart: 'ハート', diamond: 'ダイヤ', club: 'クラブ' };
 
 function describeCard(card) {
-  if (card.type === 'joker') return 'ジョーカー';
+  if (card.type === 'joker') {
+    return card.chosenRank
+      ? `ジョーカー(${suitNames[card.chosenSuit]}の${rankLabel(card.chosenRank)}扱い)`
+      : 'ジョーカー';
+  }
   return `${suitNames[card.suit]}の${rankLabel(card.rank)}`;
+}
+
+// The numeric value a discarded card counts as for matching purposes
+// (page-one/当たり target, furiten lock). A normal card just uses its own
+// rank; a joker only has one once it's been played, via the number the
+// player declared for that play.
+function discardRank(card) {
+  return card.type === 'joker' ? card.chosenRank : card.rank;
 }
 
 class Room {
@@ -344,7 +356,7 @@ class Room {
     this.currentPlayerIndex = (((this.currentPlayerIndex + steps * this.direction) % n) + n) % n;
   }
 
-  playCard(playerId, cardId, chosenSuit) {
+  playCard(playerId, cardId, chosenSuit, chosenRank) {
     if (this.awaitingPassFrom.length > 0) return { error: '他のプレイヤーの確認待ちです' };
     const playerIndex = this.players.findIndex((p) => p.id === playerId);
     if (playerIndex !== this.currentPlayerIndex) return { error: 'あなたの番ではありません' };
@@ -377,10 +389,20 @@ class Room {
     if ((card.type === 'joker' || card.rank === 8) && !SUITS.includes(chosenSuit)) {
       return { error: 'マークを選んでください' };
     }
+    const rankNum = Number(chosenRank);
+    if (card.type === 'joker' && !(Number.isInteger(rankNum) && rankNum >= 1 && rankNum <= 13)) {
+      return { error: '数字を選んでください' };
+    }
+
+    // A joker keeps its own identity (rank stays null) so it deals and
+    // scores normally the next time it's shuffled back in; the discard
+    // pile/history instead get a display-only copy carrying the number and
+    // suit the player declared, so past turns never retroactively change.
+    const discardedCard = card.type === 'joker' ? { ...card, chosenRank: rankNum, chosenSuit } : card;
 
     player.hand.splice(cardIndex, 1);
-    this.discardPile.push(card);
-    this.discardHistory.push(card);
+    this.discardPile.push(discardedCard);
+    this.discardHistory.push(discardedCard);
     this.pendingDraw = false;
 
     if (player.hand.length === 0) {
@@ -425,13 +447,13 @@ class Room {
       return { success: true };
     }
 
-    this.addLog(`${player.name} が ${describeCard(card)} を出しました`);
+    this.addLog(`${player.name} が ${describeCard(discardedCard)} を出しました`);
 
     // The previous discard is about to be superseded. Anyone who could have
     // ronned on it but didn't is now furiten on that rank until their own
     // turn comes around.
     if (this.lastDiscardCard) {
-      const oldRank = this.lastDiscardCard.rank;
+      const oldRank = discardRank(this.lastDiscardCard);
       for (const other of this.players) {
         if (other.id === player.id) continue;
         if (canRon(other.hand, oldRank) && !other.furitenRanks.includes(oldRank)) {
@@ -440,7 +462,9 @@ class Room {
       }
     }
 
-    this.lastDiscardCard = card.type === 'normal' ? card : null;
+    // A joker's declared number now makes it ron-able just like any other
+    // discard, using the value the player picked for it.
+    this.lastDiscardCard = discardedCard;
     this.lastDiscardPlayerId = player.id;
 
     if (player.hand.length === 1 && player.hand[0].type !== 'joker' && player.hand[0].rank !== 8) {
@@ -540,7 +564,7 @@ class Room {
       // matches the rank they discarded, give them a chance to turn the
       // tables with 当たり返し before the claim is paid out normally.
       const discarder = this.players.find((p) => p.id === this.lastDiscardPlayerId);
-      if (discarder && canRon(discarder.hand, this.lastDiscardCard.rank)) {
+      if (discarder && canRon(discarder.hand, discardRank(this.lastDiscardCard))) {
         this.awaitingRonBack = discarder.id;
         this.addLog(`${discarder.name} は当たり返しできます`);
         return;
@@ -569,7 +593,7 @@ class Room {
 
   finalizeRon() {
     const discarder = this.players.find((p) => p.id === this.lastDiscardPlayerId);
-    const target = this.lastDiscardCard.rank;
+    const target = discardRank(this.lastDiscardCard);
     const winners = this.ronClaimants;
     const deltas = {};
     let discarderLoss = 0;
@@ -608,7 +632,7 @@ class Room {
   ronBack(playerId) {
     if (this.awaitingRonBack !== playerId) return { error: '今は当たり返しできません' };
     const discarder = this.players.find((p) => p.id === playerId);
-    const target = this.lastDiscardCard.rank;
+    const target = discardRank(this.lastDiscardCard);
     const claimants = this.ronClaimants;
     const deltas = {};
     let totalGain = 0;
@@ -702,10 +726,10 @@ class Room {
     }
     const player = this.players.find((p) => p.id === playerId);
     if (!player) return { error: 'プレイヤーが見つかりません' };
-    if (player.furitenRanks.includes(this.lastDiscardCard.rank)) {
+    if (player.furitenRanks.includes(discardRank(this.lastDiscardCard))) {
       return { error: 'この数字は一度見送っているので当たりを宣言できません(自分の番が来るまでフリテン)' };
     }
-    if (!canRon(player.hand, this.lastDiscardCard.rank)) {
+    if (!canRon(player.hand, discardRank(this.lastDiscardCard))) {
       return { error: '手札の合計が一致していません' };
     }
 
@@ -795,8 +819,8 @@ class Room {
         this.lastDiscardCard &&
         this.lastDiscardPlayerId !== forPlayerId &&
         this.awaitingPassFrom.includes(forPlayerId) &&
-        !me.furitenRanks.includes(this.lastDiscardCard.rank) &&
-        canRon(me.hand, this.lastDiscardCard.rank)
+        !me.furitenRanks.includes(discardRank(this.lastDiscardCard)) &&
+        canRon(me.hand, discardRank(this.lastDiscardCard))
       ),
       canRonBack: this.awaitingRonBack === forPlayerId,
       awaitingRonBack: this.awaitingRonBack,
@@ -820,4 +844,4 @@ class Room {
   }
 }
 
-module.exports = { Room, SUITS, cardMatches, canFinishWith, canRon, handScore };
+module.exports = { Room, SUITS, cardMatches, canFinishWith, canRon, handScore, discardRank };

@@ -326,6 +326,31 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .suit-btn.red { color: #d21f1f; }
 .suit-btn.black { color: #1a1a1a; }
 
+#rankChooser { margin-top: 16px; }
+#rankChooser p { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.rank-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+.rank-btn {
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  padding: 0;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid #444;
+  font-size: 13px;
+  font-weight: bold;
+}
+.rank-btn.selected {
+  background: var(--yellow);
+  color: #1a1a1a;
+  border-color: var(--yellow);
+}
+
 .pageone-btn { background: #d21f1f; }
 .ron-btn { background: #b8860b; }
 .dosun-btn { background: #8e2de2; }
@@ -350,19 +375,37 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 
 #handSizeChooser {
+  max-width: 320px;
+  margin: 0 auto;
+}
+.hand-size-presets {
   display: flex;
   gap: 8px;
   align-items: center;
   justify-content: center;
-  max-width: 320px;
-  margin: 0 auto;
 }
-#handSizeChooser input {
+.hand-size-btn {
+  width: auto;
+  flex: 1;
+  margin: 0;
+}
+.hand-size-btn.selected {
+  background: var(--yellow);
+  color: #1a1a1a;
+}
+#handSizeCustom {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8px;
+}
+#handSizeCustom input {
   width: 90px;
   margin: 0;
   text-align: center;
 }
-#handSizeChooser button {
+#handSizeCustom button {
   width: auto;
   flex: 1;
   margin: 0;

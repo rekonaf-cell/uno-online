@@ -2,7 +2,7 @@ const path = require('path');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { Room, canRon } = require('./game');
+const { Room, canRon, discardRank } = require('./game');
 const { decideTurnAction, decideAfterDraw } = require('./bot');
 
 const app = express();
@@ -48,13 +48,14 @@ function findNextBotStep(room) {
       if (bot) return { type: 'dosun', playerId: bot.id };
     }
     if (room.lastDiscardCard) {
+      const target = discardRank(room.lastDiscardCard);
       const bot = room.players.find(
         (p) =>
           p.isBot &&
           room.awaitingPassFrom.includes(p.id) &&
           p.id !== room.lastDiscardPlayerId &&
-          !p.furitenRanks.includes(room.lastDiscardCard.rank) &&
-          canRon(p.hand, room.lastDiscardCard.rank)
+          !p.furitenRanks.includes(target) &&
+          canRon(p.hand, target)
       );
       if (bot) return { type: 'ron', playerId: bot.id };
     }
@@ -83,7 +84,7 @@ function applyBotDecision(room, bot, decision) {
   } else if (decision.action === 'endTurn') {
     room.endTurn(bot.id);
   } else if (decision.action === 'play') {
-    room.playCard(bot.id, decision.cardId, decision.chosenSuit);
+    room.playCard(bot.id, decision.cardId, decision.chosenSuit, decision.chosenRank);
     if (
       bot.hand.length === 1 &&
       !bot.declaredPageOne &&
@@ -265,10 +266,10 @@ io.on('connection', (socket) => {
     broadcastState(room);
   });
 
-  socket.on('playCard', ({ cardId, chosenSuit }) => {
+  socket.on('playCard', ({ cardId, chosenSuit, chosenRank }) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || !room.started) return;
-    const result = room.playCard(socket.id, cardId, chosenSuit);
+    const result = room.playCard(socket.id, cardId, chosenSuit, chosenRank);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;
