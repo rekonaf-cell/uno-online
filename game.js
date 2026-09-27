@@ -457,11 +457,12 @@ class Room {
 
     // The previous discard is about to be superseded. Anyone who could have
     // ronned on it but didn't is now furiten on that rank until their own
-    // turn comes around.
+    // turn comes around — except whoever discarded it themselves, since
+    // self-ron was never actually possible for them in the first place.
     if (this.lastDiscardCard) {
       const oldRank = discardRank(this.lastDiscardCard);
       for (const other of this.players) {
-        if (other.id === player.id) continue;
+        if (other.id === player.id || other.id === this.lastDiscardPlayerId) continue;
         if (canRon(other.hand, oldRank) && !other.furitenRanks.includes(oldRank)) {
           other.furitenRanks.push(oldRank);
         }
