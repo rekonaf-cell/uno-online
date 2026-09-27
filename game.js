@@ -412,44 +412,73 @@ class Room {
     this.discardHistory.push(discardedCard);
 
     if (player.hand.length === 0) {
-      this.winnerIds = [player.id];
-      this.started = false;
-      this.phase = 'roundEnd';
-      this.dealerId = player.id;
-      this.lastDiscardCard = null;
-      this.lastDiscardPlayerId = null;
+      // The winning card is ron-able just like any other discard — someone
+      // else's hand might also total its rank. So this doesn't finalize
+      // the win outright: it goes through the same pass round as a normal
+      // play, and only becomes a real win if nobody claims 当たり on it.
+      this.addLog(`${player.name} が ${describeCard(discardedCard)} を出して上がろうとしています`);
 
-      // Winning with a 2/3 still leaves its draw obligation behind: the
-      // next player in turn order has to draw it (stacked on top of any
-      // chain already running), same as if the round were continuing.
-      // This lands before scoring so it inflates their hand for the payout.
-      if (card.rank === 2 || card.rank === 3) {
-        const amount = (this.pendingChain && this.pendingChain.rank === card.rank ? this.pendingChain.amount : 0) + card.rank;
-        const n = this.players.length;
-        const nextIndex = (((playerIndex + this.direction) % n) + n) % n;
-        const nextPlayer = this.players[nextIndex];
-        if (nextPlayer && nextPlayer.id !== player.id) {
-          this.drawCards(nextPlayer, amount);
-          this.addLog(`${nextPlayer.name} は上がりの${card.rank}の影響で${amount}枚引きました`);
+      if (this.lastDiscardCard) {
+        const oldRank = discardRank(this.lastDiscardCard);
+        for (const other of this.players) {
+          if (other.id === player.id || other.id === this.lastDiscardPlayerId) continue;
+          if (canRon(other.hand, oldRank) && !other.furitenRanks.includes(oldRank)) {
+            other.furitenRanks.push(oldRank);
+          }
         }
-        this.pendingChain = null;
       }
 
-      const deltas = {};
-      let totalGain = 0;
-      for (const other of this.players) {
-        if (other.id === player.id) continue;
-        const pts = handScore(other.hand);
-        other.score -= pts;
-        deltas[other.id] = -pts;
-        totalGain += pts;
-      }
-      player.score += totalGain;
-      deltas[player.id] = totalGain;
-      this.lastWinType = 'normal';
-      this.lastRoundDeltas = deltas;
+      this.lastDiscardCard = discardedCard;
+      this.lastDiscardPlayerId = player.id;
 
-      this.addLog(`${player.name} が上がりました！(+${totalGain}点)`);
+      this.pendingResolve = () => {
+        this.winnerIds = [player.id];
+        this.started = false;
+        this.phase = 'roundEnd';
+        this.dealerId = player.id;
+        this.lastDiscardCard = null;
+        this.lastDiscardPlayerId = null;
+
+        // Winning with a 2/3 still leaves its draw obligation behind: the
+        // next player in turn order has to draw it (stacked on top of any
+        // chain already running), same as if the round were continuing.
+        // This lands before scoring so it inflates their hand for the payout.
+        if (card.rank === 2 || card.rank === 3) {
+          const amount = (this.pendingChain && this.pendingChain.rank === card.rank ? this.pendingChain.amount : 0) + card.rank;
+          const n = this.players.length;
+          const nextIndex = (((playerIndex + this.direction) % n) + n) % n;
+          const nextPlayer = this.players[nextIndex];
+          if (nextPlayer && nextPlayer.id !== player.id) {
+            this.drawCards(nextPlayer, amount);
+            this.addLog(`${nextPlayer.name} は上がりの${card.rank}の影響で${amount}枚引きました`);
+          }
+          this.pendingChain = null;
+        }
+
+        const deltas = {};
+        let totalGain = 0;
+        for (const other of this.players) {
+          if (other.id === player.id) continue;
+          const pts = handScore(other.hand);
+          other.score -= pts;
+          deltas[other.id] = -pts;
+          totalGain += pts;
+        }
+        player.score += totalGain;
+        deltas[player.id] = totalGain;
+        this.lastWinType = 'normal';
+        this.lastRoundDeltas = deltas;
+
+        this.addLog(`${player.name} が上がりました！(+${totalGain}点)`);
+      };
+
+      this.awaitingPassFrom = this.players.filter((p) => p.id !== player.id && p.connected).map((p) => p.id);
+      if (this.awaitingPassFrom.length === 0) {
+        const resolve = this.pendingResolve;
+        this.pendingResolve = null;
+        resolve();
+      }
+
       return { success: true };
     }
 
