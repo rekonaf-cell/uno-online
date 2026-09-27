@@ -15,6 +15,34 @@ const rooms = new Map();
 const BOT_MOVE_DELAY_MS = 900;
 const botSchedulePending = new Set(); // room codes with a bot step already queued
 
+// A dropped socket (screen sleep, backgrounded app, a network blip) looks
+// identical to someone actually leaving until they either reconnect or the
+// grace period runs out — deleting the room immediately would make the
+// reconnect flow below pointless, especially for a solo game against bots
+// where the disconnecting human is the *only* human in the room.
+const ROOM_CLEANUP_DELAY_MS = 3 * 60 * 1000;
+const roomCleanupTimers = new Map(); // code -> timeout handle
+
+function cancelRoomCleanup(code) {
+  const timer = roomCleanupTimers.get(code);
+  if (timer) {
+    clearTimeout(timer);
+    roomCleanupTimers.delete(code);
+  }
+}
+
+function scheduleRoomCleanup(code) {
+  if (roomCleanupTimers.has(code)) return;
+  const timer = setTimeout(() => {
+    roomCleanupTimers.delete(code);
+    const room = rooms.get(code);
+    if (!room) return;
+    const stillConnected = room.players.some((p) => p.connected && !p.isBot);
+    if (!stillConnected) rooms.delete(code);
+  }, ROOM_CLEANUP_DELAY_MS);
+  roomCleanupTimers.set(code, timer);
+}
+
 function genRoomCode() {
   let code;
   do {
@@ -141,17 +169,20 @@ function scheduleBotStep(room) {
 }
 
 io.on('connection', (socket) => {
-  socket.on('createRoom', ({ name }) => {
+  socket.on('createRoom', ({ name, clientId }) => {
     const code = genRoomCode();
-    const room = new Room(code, socket.id);
-    room.addPlayer(socket.id, (name || '名無し').slice(0, 12));
+    const playerId = clientId || socket.id;
+    const room = new Room(code, playerId);
+    room.addPlayer(playerId, (name || '名無し').slice(0, 12));
     rooms.set(code, room);
     socket.join(code);
+    socket.join(playerId);
     socket.data.roomCode = code;
+    socket.data.playerId = playerId;
     broadcastState(room);
   });
 
-  socket.on('joinRoom', ({ code, name }) => {
+  socket.on('joinRoom', ({ code, name, clientId }) => {
     const room = rooms.get((code || '').trim());
     if (!room) {
       socket.emit('errorMsg', '部屋が見つかりません');
@@ -165,16 +196,42 @@ io.on('connection', (socket) => {
       socket.emit('errorMsg', '満員です');
       return;
     }
-    room.addPlayer(socket.id, (name || '名無し').slice(0, 12));
+    const playerId = clientId || socket.id;
+    room.addPlayer(playerId, (name || '名無し').slice(0, 12));
     socket.join(room.code);
+    socket.join(playerId);
     socket.data.roomCode = room.code;
+    socket.data.playerId = playerId;
+    cancelRoomCleanup(room.code);
+    broadcastState(room);
+  });
+
+  // The page came back from being backgrounded/asleep with a fresh
+  // socket.id — reattach it to the same seat via the persistent client id
+  // instead of leaving the player stranded in the lobby.
+  socket.on('rejoin', ({ code, clientId }) => {
+    const room = rooms.get((code || '').trim());
+    if (!room || !clientId) {
+      socket.emit('rejoinFailed');
+      return;
+    }
+    const player = room.reconnectPlayer(clientId);
+    if (!player) {
+      socket.emit('rejoinFailed');
+      return;
+    }
+    socket.join(room.code);
+    socket.join(clientId);
+    socket.data.roomCode = room.code;
+    socket.data.playerId = clientId;
+    cancelRoomCleanup(room.code);
     broadcastState(room);
   });
 
   socket.on('addBot', () => {
     const room = rooms.get(socket.data.roomCode);
     if (!room) return;
-    if (room.hostId !== socket.id) {
+    if (room.hostId !== socket.data.playerId) {
       socket.emit('errorMsg', 'ホストのみCPUを追加できます');
       return;
     }
@@ -193,7 +250,7 @@ io.on('connection', (socket) => {
   socket.on('removeBot', ({ botId }) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room) return;
-    if (room.hostId !== socket.id) {
+    if (room.hostId !== socket.data.playerId) {
       socket.emit('errorMsg', 'ホストのみCPUを削除できます');
       return;
     }
@@ -212,7 +269,7 @@ io.on('connection', (socket) => {
   socket.on('startGame', () => {
     const room = rooms.get(socket.data.roomCode);
     if (!room) return;
-    if (room.hostId !== socket.id) {
+    if (room.hostId !== socket.data.playerId) {
       socket.emit('errorMsg', 'ホストのみ開始できます');
       return;
     }
@@ -231,7 +288,7 @@ io.on('connection', (socket) => {
   socket.on('rollDice', () => {
     const room = rooms.get(socket.data.roomCode);
     if (!room) return;
-    const result = room.rollDice(socket.id);
+    const result = room.rollDice(socket.data.playerId);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;
@@ -242,7 +299,7 @@ io.on('connection', (socket) => {
   socket.on('chooseHandSize', ({ size }) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room) return;
-    const result = room.chooseHandSize(socket.id, size);
+    const result = room.chooseHandSize(socket.data.playerId, size);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;
@@ -253,7 +310,7 @@ io.on('connection', (socket) => {
   socket.on('dosun', () => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || !room.started) return;
-    const result = room.dosun(socket.id);
+    const result = room.dosun(socket.data.playerId);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;
@@ -264,7 +321,7 @@ io.on('connection', (socket) => {
   socket.on('playCard', ({ cardId, chosenSuit, chosenRank }) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || !room.started) return;
-    const result = room.playCard(socket.id, cardId, chosenSuit, chosenRank);
+    const result = room.playCard(socket.data.playerId, cardId, chosenSuit, chosenRank);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;
@@ -275,7 +332,7 @@ io.on('connection', (socket) => {
   socket.on('pass', () => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || !room.started) return;
-    const result = room.pass(socket.id);
+    const result = room.pass(socket.data.playerId);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;
@@ -286,7 +343,7 @@ io.on('connection', (socket) => {
   socket.on('ron', () => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || !room.started) return;
-    const result = room.ron(socket.id);
+    const result = room.ron(socket.data.playerId);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;
@@ -297,7 +354,7 @@ io.on('connection', (socket) => {
   socket.on('ronBack', () => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || !room.started) return;
-    const result = room.ronBack(socket.id);
+    const result = room.ronBack(socket.data.playerId);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;
@@ -308,7 +365,7 @@ io.on('connection', (socket) => {
   socket.on('declineRonBack', () => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || !room.started) return;
-    const result = room.declineRonBack(socket.id);
+    const result = room.declineRonBack(socket.data.playerId);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;
@@ -319,7 +376,7 @@ io.on('connection', (socket) => {
   socket.on('declarePageOne', () => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || !room.started) return;
-    const result = room.declarePageOne(socket.id);
+    const result = room.declarePageOne(socket.data.playerId);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;
@@ -330,7 +387,7 @@ io.on('connection', (socket) => {
   socket.on('drawCard', () => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || !room.started) return;
-    const result = room.draw(socket.id);
+    const result = room.draw(socket.data.playerId);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;
@@ -352,11 +409,13 @@ function handleDisconnect(socket) {
   if (!code) return;
   const room = rooms.get(code);
   if (!room) return;
-  room.removePlayer(socket.id);
+  room.removePlayer(socket.data.playerId);
   socket.data.roomCode = null;
   const stillConnected = room.players.some((p) => p.connected && !p.isBot);
   if (!stillConnected) {
-    rooms.delete(code);
+    // Don't delete right away — this is indistinguishable from a screen
+    // lock or a background tab until the grace period actually runs out.
+    scheduleRoomCleanup(code);
     return;
   }
   broadcastState(room);

@@ -176,6 +176,15 @@ class Room {
     if (p) p.connected = false;
   }
 
+  // A socket dropped (screen sleep, backgrounding, a network blip) and came
+  // back with a new socket.id, but the same persistent client id — restore
+  // them into their existing seat instead of treating them as a new player.
+  reconnectPlayer(id) {
+    const p = this.players.find((pl) => pl.id === id);
+    if (p) p.connected = true;
+    return p || null;
+  }
+
   get currentPlayer() {
     return this.players[this.currentPlayerIndex];
   }
@@ -517,9 +526,11 @@ class Room {
     this.lastDiscardCard = discardedCard;
     this.lastDiscardPlayerId = player.id;
 
-    if (player.hand.length === 1 && player.hand[0].type !== 'joker' && player.hand[0].rank !== 8) {
+    if (player.hand.length === 1) {
       // Eligibility to declare depends on the card THEY'D be winning with
-      // (the one now left in hand), not the card they just played.
+      // (the one now left in hand), not the card they just played. Applies
+      // even to a joker/8 last card: they don't need it to win, but can
+      // still declare it as a bluff/tell.
       player.declaredPageOne = false; // must declare fresh
       player.pageOneDeadline = this.discardHistory.length; // must declare before anyone else plays next
     }
@@ -821,10 +832,8 @@ class Room {
     const player = this.players.find((p) => p.id === playerId);
     if (!player) return { error: 'プレイヤーが見つかりません' };
     if (player.hand.length !== 1) return { error: '残り1枚のときだけ宣言できます' };
-    const card = player.hand[0];
-    if (card.type === 'joker' || card.rank === 8) {
-      return { error: 'ジョーカー・8では宣言できません' };
-    }
+    // ジョーカー・8は宣言なしでも上がれる特別枠だが、宣言そのものは駆け引き
+    // として誰でも自由にできる(相手への牽制・ブラフとして使える)。
     if (player.pageOneDeadline !== this.discardHistory.length) {
       return { error: 'タイミングを逃しました(次の人が出す前に宣言してください)' };
     }
@@ -879,8 +888,6 @@ class Room {
         me &&
         me.hand.length === 1 &&
         !me.declaredPageOne &&
-        me.hand[0].type !== 'joker' &&
-        me.hand[0].rank !== 8 &&
         me.pageOneDeadline === this.discardHistory.length
       ),
       canRon: !!(

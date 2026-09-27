@@ -227,7 +227,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
    its lower-right, each offset enough to visibly peek past the one in
    front of it (a smaller card centered behind a bigger one would just be
    fully hidden, so the offset has to exceed the size difference). */
-#historyStack { position: relative; width: 100px; height: 90px; }
+#historyStack { position: relative; width: 128px; height: 90px; }
 .hist-card {
   position: absolute;
   border-radius: 6px;
@@ -249,9 +249,9 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   background: linear-gradient(135deg, var(--red), var(--yellow), var(--green), var(--blue));
   color: white;
 }
-.hist-card.depth-3 { left: 62px; top: 22px; width: 34px; height: 48px; opacity: 0.55; font-size: 10px; }
-.hist-card.depth-2 { left: 46px; top: 18px; width: 38px; height: 54px; opacity: 0.72; font-size: 11px; }
-.hist-card.depth-1 { left: 26px; top: 12px; width: 44px; height: 62px; opacity: 0.88; font-size: 12px; }
+.hist-card.depth-3 { left: 90px; top: 22px; width: 34px; height: 48px; opacity: 0.55; font-size: 11px; }
+.hist-card.depth-2 { left: 62px; top: 18px; width: 38px; height: 54px; opacity: 0.72; font-size: 12px; }
+.hist-card.depth-1 { left: 32px; top: 12px; width: 44px; height: 62px; opacity: 0.88; font-size: 13px; }
 .hist-card.depth-0 {
   left: 0;
   top: 4px;
@@ -660,7 +660,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   font-size: 11px;
   font-weight: 800;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
-  transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.3, 1), opacity 0.45s ease;
+  transition: transform 0.7s cubic-bezier(0.2, 0.7, 0.3, 1), opacity 0.7s ease;
   opacity: 1;
 }
 .fly-card.back {

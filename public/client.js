@@ -1,15 +1,87 @@
 const socket = io();
 
+// A persistent id survives page reloads and socket reconnects (screen
+// sleep, backgrounding another app, a network blip) — socket.id does not,
+// it's reissued on every reconnect. The server keys players by this id, so
+// losing track of it client-side would strand a reconnecting player in the
+// lobby with no way back into their seat.
+function getClientId() {
+  try {
+    let id = localStorage.getItem('pageOneClientId');
+    if (!id) {
+      id = window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'c-' + Math.random().toString(36).slice(2) + Date.now();
+      localStorage.setItem('pageOneClientId', id);
+    }
+    return id;
+  } catch (e) {
+    return 'c-' + Math.random().toString(36).slice(2) + Date.now();
+  }
+}
+
+// Read once and reused everywhere — never re-read from storage mid-session,
+// so this tab's identity can't shift under it (e.g. another tab in the same
+// browser changing the stored value, or a transient storage error handing
+// back a different fallback on a later call).
+const CLIENT_ID = getClientId();
+
+function saveSession(roomCode) {
+  try {
+    localStorage.setItem('pageOneSession', JSON.stringify({ roomCode, clientId: CLIENT_ID }));
+  } catch (e) {
+    // Ignore — worst case a reload drops back to the lobby.
+  }
+}
+
+function loadSession() {
+  try {
+    const raw = localStorage.getItem('pageOneSession');
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function clearSession() {
+  try {
+    localStorage.removeItem('pageOneSession');
+  } catch (e) {
+    // Ignore.
+  }
+}
+
 const screens = {
   lobby: document.getElementById('lobby'),
   waiting: document.getElementById('waiting'),
   game: document.getElementById('game'),
 };
 
+// Best-effort: keep the screen from sleeping during an active game so the
+// reconnect flow above rarely has to kick in. Not supported everywhere and
+// never required for correctness, so failures are silently ignored.
+let wakeLock = null;
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => {
+        wakeLock = null;
+      });
+    }
+  } catch (e) {
+    // Not supported, denied, or the tab isn't visible — ignore.
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !wakeLock && !screens.game.classList.contains('hidden')) {
+    requestWakeLock();
+  }
+});
+
 function showScreen(name) {
   for (const key of Object.keys(screens)) {
     screens[key].classList.toggle('hidden', key !== name);
   }
+  if (name === 'game') requestWakeLock();
 }
 
 let myId = null;
@@ -141,7 +213,7 @@ function flyCard(fromEl, toEl, faceLabel, colorClass) {
     ghost.style.transform = `translate(${endX - startX}px, ${endY - startY}px) rotate(${faceLabel ? -20 : 20}deg)`;
     ghost.style.opacity = '0';
   });
-  setTimeout(() => ghost.remove(), 480);
+  setTimeout(() => ghost.remove(), 720);
 }
 
 let lastAnimatedActionSeq = null; // null = haven't seen a state yet, so the first one is a join/reload, not a new move
@@ -324,7 +396,7 @@ function showToast(msg) {
 document.getElementById('createBtn').addEventListener('click', () => {
   const name = document.getElementById('nameInput').value.trim();
   if (!name) return showToast('ニックネームを入力してください');
-  socket.emit('createRoom', { name });
+  socket.emit('createRoom', { name, clientId: CLIENT_ID });
 });
 
 document.getElementById('joinBtn').addEventListener('click', () => {
@@ -332,7 +404,7 @@ document.getElementById('joinBtn').addEventListener('click', () => {
   const code = document.getElementById('codeInput').value.trim();
   if (!name) return showToast('ニックネームを入力してください');
   if (!code) return showToast('部屋コードを入力してください');
-  socket.emit('joinRoom', { name, code });
+  socket.emit('joinRoom', { name, code, clientId: CLIENT_ID });
 });
 
 document.getElementById('startBtn').addEventListener('click', () => {
@@ -445,14 +517,39 @@ document.querySelectorAll('.suit-btn').forEach((btn) => {
 });
 
 socket.on('connect', () => {
-  myId = socket.id;
+  myId = CLIENT_ID;
+  // A reconnect (screen woke back up, app came back to the foreground,
+  // the network blipped) gets a brand new socket.id, so if we were mid
+  // game, ask the server to reattach this socket to that same seat
+  // instead of sitting in the lobby with a dead connection.
+  const session = loadSession();
+  if (session && session.clientId === myId) {
+    socket.emit('rejoin', { code: session.roomCode, clientId: myId });
+  }
+});
+
+socket.on('rejoinFailed', () => {
+  // The room's gone (cleaned up after the grace period) or never existed
+  // for this id — stop trying and let the player start over from the lobby.
+  clearSession();
 });
 
 socket.on('errorMsg', (msg) => showToast(msg));
 
 socket.on('state', (state) => {
-  myId = socket.id;
+  myId = CLIENT_ID;
+  if (state.code) saveSession(state.code);
   render(state);
+});
+
+// Mobile browsers can fully suspend a backgrounded tab (screen lock,
+// switching apps) — timers stop, and the socket can silently die without
+// ever firing its own 'disconnect' handling in time. Nudge a reconnect as
+// soon as the tab is visible again instead of waiting for it.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && socket.disconnected) {
+    socket.connect();
+  }
 });
 
 function render(state) {
