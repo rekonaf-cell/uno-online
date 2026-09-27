@@ -332,19 +332,50 @@ function renderGame(state) {
   const me = state.players.find((p) => p.id === myId);
   const others = state.players.filter((p) => p.id !== myId);
 
-  const oppDiv = document.getElementById('opponents');
-  oppDiv.innerHTML = '';
-  for (const p of others) {
+  // Seat opponents around the top arc of the round table (bottom stays
+  // clear for "you"), so turn order reads as a physical seating order.
+  const seatsDiv = document.getElementById('tableSeats');
+  seatsDiv.innerHTML = '';
+  const seatArc = 290;
+  const seatStart = 215;
+  const seatStep = seatArc / (others.length + 1);
+  others.forEach((p, i) => {
+    const angle = (seatStart + seatStep * (i + 1)) % 360;
+    const rad = (angle * Math.PI) / 180;
+    const leftPct = 50 + Math.sin(rad) * 50;
+    const topPct = 50 - Math.cos(rad) * 50;
     const div = document.createElement('div');
     div.className =
-      'opponent' +
+      'seat' +
       (p.id === state.currentPlayerId ? ' active' : '') +
       (!p.connected ? ' disconnected' : '') +
       (p.declaredPageOne ? ' page-one' : '');
-    const botTag = p.isBot ? ' 🤖' : '';
-    const tag = p.declaredPageOne ? '<div class="page-one-badge">📢 ページワン！</div>' : '';
-    div.innerHTML = `<div class="oname">${escapeHtml(p.name)}${botTag}</div><div class="ocount">${p.cardCount}</div><div class="oscore">${p.score}点</div>${tag}`;
-    oppDiv.appendChild(div);
+    div.style.left = leftPct + '%';
+    div.style.top = topPct + '%';
+    const botTag = p.isBot ? ' 🤖' : '👤';
+    const dealerTag = p.id === state.dealerId ? '<div class="dealer-tag">親</div>' : '';
+    const tag = p.declaredPageOne ? '<div class="page-one-badge">📢</div>' : '';
+    div.innerHTML =
+      `<div class="seat-avatar">${botTag}${dealerTag}</div>` +
+      `<div class="sname">${escapeHtml(p.name)}</div>` +
+      `<div class="sinfo">${p.cardCount}枚・${p.score}点</div>${tag}`;
+    seatsDiv.appendChild(div);
+  });
+
+  const dirBadge = document.getElementById('dirBadge');
+  dirBadge.textContent = '↻';
+  dirBadge.classList.toggle('reverse', state.direction === -1);
+
+  const selfSeat = document.querySelector('#selfSeat .seat-avatar');
+  if (selfSeat) {
+    selfSeat.classList.toggle('active', state.currentPlayerId === myId);
+    selfSeat.classList.toggle('page-one-self-avatar', !!(me && me.declaredPageOne));
+    const existingDealerTag = selfSeat.querySelector('.dealer-tag');
+    if (state.dealerId === myId && !existingDealerTag) {
+      selfSeat.insertAdjacentHTML('beforeend', '<div class="dealer-tag">親</div>');
+    } else if (state.dealerId !== myId && existingDealerTag) {
+      existingDealerTag.remove();
+    }
   }
 
   const discardTop = document.getElementById('discardTop');
