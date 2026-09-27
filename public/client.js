@@ -78,12 +78,6 @@ document.getElementById('addBotBtn').addEventListener('click', () => {
   socket.emit('addBot');
 });
 
-document.getElementById('backToLobbyBtn').addEventListener('click', () => {
-  socket.emit('leaveRoom');
-  document.getElementById('winModal').classList.add('hidden');
-  showScreen('lobby');
-});
-
 document.getElementById('nextRoundBtn').addEventListener('click', () => {
   socket.emit('startGame');
 });
