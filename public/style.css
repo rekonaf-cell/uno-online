@@ -68,6 +68,20 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   margin: 6px 0;
   display: flex;
   justify-content: space-between;
+  align-items: center;
+}
+
+.small-btn {
+  width: auto;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  background: var(--red);
+}
+
+.secondary-btn {
+  background: var(--panel);
+  border: 1px solid #444;
 }
 
 #roomCodeDisplay { color: var(--yellow); letter-spacing: 4px; }

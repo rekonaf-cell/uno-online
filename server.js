@@ -2,7 +2,8 @@ const path = require('path');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { Room } = require('./game');
+const { Room, canRon } = require('./game');
+const { decideTurnAction, decideAfterDraw } = require('./bot');
 
 const app = express();
 const server = http.createServer(app);
@@ -11,6 +12,8 @@ const io = new Server(server);
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = new Map();
+const BOT_MOVE_DELAY_MS = 900;
+const botSchedulePending = new Set(); // room codes with a bot step already queued
 
 function genRoomCode() {
   let code;
@@ -22,8 +25,101 @@ function genRoomCode() {
 
 function broadcastState(room) {
   for (const player of room.players) {
+    if (player.isBot) continue; // bots have no real socket to send to
     io.to(player.id).emit('state', room.toClientState(player.id));
   }
+  scheduleBotStep(room);
+}
+
+// Finds the single next thing a bot should do, in priority order:
+// dosun/ron interrupts first (they can fire regardless of whose turn it
+// is), then whatever the current turn/dice/hand-size step requires.
+function findNextBotStep(room) {
+  if (room.phase === 'playing' && !room.winnerId) {
+    if (room.dosunAvailable && room.topCard) {
+      const bot = room.players.find((p) => p.isBot && canRon(p.hand, room.topCard.rank));
+      if (bot) return { type: 'dosun', playerId: bot.id };
+    }
+    if (room.lastDiscardCard) {
+      const bot = room.players.find(
+        (p) =>
+          p.isBot &&
+          p.id !== room.lastDiscardPlayerId &&
+          !p.furitenRanks.includes(room.lastDiscardCard.rank) &&
+          canRon(p.hand, room.lastDiscardCard.rank)
+      );
+      if (bot) return { type: 'ron', playerId: bot.id };
+    }
+    const current = room.currentPlayer;
+    if (current && current.isBot) {
+      return { type: room.pendingDraw ? 'afterDraw' : 'turn', playerId: current.id };
+    }
+  } else if (room.phase === 'dice') {
+    const botId = room.diceRollPending.find((id) => room.players.find((p) => p.id === id)?.isBot);
+    if (botId) return { type: 'rollDice', playerId: botId };
+  } else if (room.phase === 'handSize') {
+    const dealer = room.players.find((p) => p.id === room.dealerId);
+    if (dealer && dealer.isBot) return { type: 'chooseHandSize', playerId: dealer.id };
+  }
+  return null;
+}
+
+function applyBotDecision(room, bot, decision) {
+  if (decision.action === 'draw') {
+    room.draw(bot.id);
+  } else if (decision.action === 'endTurn') {
+    room.endTurn(bot.id);
+  } else if (decision.action === 'play') {
+    room.playCard(bot.id, decision.cardId, decision.chosenSuit);
+    if (
+      bot.hand.length === 1 &&
+      !bot.declaredPageOne &&
+      bot.hand[0].type !== 'joker' &&
+      bot.hand[0].rank !== 8
+    ) {
+      room.declarePageOne(bot.id);
+    }
+  }
+}
+
+function performBotStep(room, step) {
+  const bot = room.players.find((p) => p.id === step.playerId);
+  if (!bot) return;
+  switch (step.type) {
+    case 'dosun':
+      room.dosun(bot.id);
+      break;
+    case 'ron':
+      room.ron(bot.id);
+      break;
+    case 'rollDice':
+      room.rollDice(bot.id);
+      break;
+    case 'chooseHandSize':
+      room.chooseHandSize(bot.id, 7);
+      break;
+    case 'turn':
+      applyBotDecision(room, bot, decideTurnAction(room, bot));
+      break;
+    case 'afterDraw':
+      applyBotDecision(room, bot, decideAfterDraw(room, bot));
+      break;
+    default:
+      break;
+  }
+}
+
+function scheduleBotStep(room) {
+  if (botSchedulePending.has(room.code)) return;
+  const step = findNextBotStep(room);
+  if (!step) return;
+  botSchedulePending.add(room.code);
+  setTimeout(() => {
+    botSchedulePending.delete(room.code);
+    if (!rooms.has(room.code)) return; // room was cleaned up meanwhile
+    performBotStep(room, step);
+    broadcastState(room);
+  }, BOT_MOVE_DELAY_MS);
 }
 
 io.on('connection', (socket) => {
@@ -54,6 +150,44 @@ io.on('connection', (socket) => {
     room.addPlayer(socket.id, (name || '名無し').slice(0, 12));
     socket.join(room.code);
     socket.data.roomCode = room.code;
+    broadcastState(room);
+  });
+
+  socket.on('addBot', () => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room) return;
+    if (room.hostId !== socket.id) {
+      socket.emit('errorMsg', 'ホストのみCPUを追加できます');
+      return;
+    }
+    if (room.phase === 'dice' || room.phase === 'handSize' || room.phase === 'playing') {
+      socket.emit('errorMsg', 'ゲーム中はCPUを追加できません');
+      return;
+    }
+    if (room.players.length >= 6) {
+      socket.emit('errorMsg', '満員です');
+      return;
+    }
+    room.addBot();
+    broadcastState(room);
+  });
+
+  socket.on('removeBot', ({ botId }) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room) return;
+    if (room.hostId !== socket.id) {
+      socket.emit('errorMsg', 'ホストのみCPUを削除できます');
+      return;
+    }
+    if (room.phase === 'dice' || room.phase === 'handSize' || room.phase === 'playing') {
+      socket.emit('errorMsg', 'ゲーム中はCPUを削除できません');
+      return;
+    }
+    const result = room.removeBot(botId);
+    if (result.error) {
+      socket.emit('errorMsg', result.error);
+      return;
+    }
     broadcastState(room);
   });
 
@@ -180,7 +314,7 @@ function handleDisconnect(socket) {
   if (!room) return;
   room.removePlayer(socket.id);
   socket.data.roomCode = null;
-  const stillConnected = room.players.some((p) => p.connected);
+  const stillConnected = room.players.some((p) => p.connected && !p.isBot);
   if (!stillConnected) {
     rooms.delete(code);
     return;

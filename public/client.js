@@ -64,6 +64,10 @@ document.getElementById('startBtn').addEventListener('click', () => {
   socket.emit('startGame');
 });
 
+document.getElementById('addBotBtn').addEventListener('click', () => {
+  socket.emit('addBot');
+});
+
 document.getElementById('backToLobbyBtn').addEventListener('click', () => {
   socket.emit('leaveRoom');
   document.getElementById('winModal').classList.add('hidden');
@@ -188,14 +192,25 @@ function renderWaiting(state) {
     return;
   }
 
+  const isHost = state.hostId === myId;
+
   const list = document.getElementById('playerList');
   list.innerHTML = '';
   for (const p of state.players) {
     const li = document.createElement('li');
-    li.textContent = p.name + (p.id === state.hostId ? '(ホスト)' : '');
+    const label = document.createElement('span');
+    label.textContent = p.name + (p.id === state.hostId ? '(ホスト)' : '') + (p.isBot ? ' 🤖CPU' : '');
+    li.appendChild(label);
+    if (p.isBot && isHost) {
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = '削除';
+      removeBtn.className = 'small-btn';
+      removeBtn.addEventListener('click', () => socket.emit('removeBot', { botId: p.id }));
+      li.appendChild(removeBtn);
+    }
     list.appendChild(li);
   }
-  const isHost = state.hostId === myId;
+  document.getElementById('addBotBtn').classList.toggle('hidden', !isHost || state.players.length >= 6);
   document.getElementById('startBtn').classList.toggle('hidden', !isHost);
   document.getElementById('waitingHint').classList.toggle('hidden', isHost);
   document.getElementById('startBtn').disabled = state.players.length < 2;
@@ -243,8 +258,9 @@ function renderGame(state) {
   for (const p of others) {
     const div = document.createElement('div');
     div.className = 'opponent' + (p.id === state.currentPlayerId ? ' active' : '') + (!p.connected ? ' disconnected' : '');
+    const botTag = p.isBot ? ' 🤖' : '';
     const tag = p.declaredPageOne ? ' <span class="tag">📢1枚</span>' : '';
-    div.innerHTML = `<div class="oname">${escapeHtml(p.name)}${tag}</div><div class="ocount">${p.cardCount}</div><div class="oscore">${p.score}点</div>`;
+    div.innerHTML = `<div class="oname">${escapeHtml(p.name)}${botTag}${tag}</div><div class="ocount">${p.cardCount}</div><div class="oscore">${p.score}点</div>`;
     oppDiv.appendChild(div);
   }
 

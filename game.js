@@ -113,11 +113,36 @@ class Room {
     this.diceRolls = {}; // { [playerId]: { d1, d2, total } }
     this.diceRollPending = [];
     this.dosunAvailable = false;
+    this.botCounter = 0;
   }
 
-  addPlayer(id, name) {
+  addPlayer(id, name, isBot = false) {
     if (this.players.find((p) => p.id === id)) return;
-    this.players.push({ id, name, hand: [], connected: true, declaredPageOne: false, score: 0, furitenRanks: [] });
+    this.players.push({
+      id,
+      name,
+      hand: [],
+      connected: true,
+      declaredPageOne: false,
+      score: 0,
+      furitenRanks: [],
+      isBot,
+    });
+  }
+
+  addBot() {
+    this.botCounter += 1;
+    const id = `bot-${this.code}-${this.botCounter}`;
+    const name = `CPU${this.botCounter}`;
+    this.addPlayer(id, name, true);
+    return { success: true, id };
+  }
+
+  removeBot(botId) {
+    const idx = this.players.findIndex((p) => p.id === botId && p.isBot);
+    if (idx === -1) return { error: 'CPUが見つかりません' };
+    this.players.splice(idx, 1);
+    return { success: true };
   }
 
   removePlayer(id) {
@@ -517,6 +542,7 @@ class Room {
         isMe: p.id === forPlayerId,
         declaredPageOne: p.declaredPageOne,
         score: p.score,
+        isBot: p.isBot,
       })),
       myHand: this.started && me ? me.hand : [],
       lastWinType: this.lastWinType,
@@ -554,4 +580,4 @@ class Room {
   }
 }
 
-module.exports = { Room, SUITS };
+module.exports = { Room, SUITS, cardMatches, canFinishWith, canRon, handScore };
