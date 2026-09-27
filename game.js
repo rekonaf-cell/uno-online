@@ -175,7 +175,11 @@ class Room {
     this.deck = shuffle(createDeck());
     this.discardPile = [];
     this.direction = 1;
-    this.currentPlayerIndex = 0;
+    // Turn order starts from the dealer: they're the one who "exposes" the
+    // opening card, so a skip/reverse/chain effect on it applies relative
+    // to their seat, exactly like it would for a card someone played.
+    const dealerIndex = this.players.findIndex((p) => p.id === this.dealerId);
+    this.currentPlayerIndex = dealerIndex >= 0 ? dealerIndex : 0;
     this.started = true;
     this.phase = 'playing';
     this.winnerIds = [];
@@ -381,6 +385,22 @@ class Room {
       this.dealerId = player.id;
       this.lastDiscardCard = null;
       this.lastDiscardPlayerId = null;
+
+      // Winning with a 2/3 still leaves its draw obligation behind: the
+      // next player in turn order has to draw it (stacked on top of any
+      // chain already running), same as if the round were continuing.
+      // This lands before scoring so it inflates their hand for the payout.
+      if (card.rank === 2 || card.rank === 3) {
+        const amount = (this.pendingChain && this.pendingChain.rank === card.rank ? this.pendingChain.amount : 0) + card.rank;
+        const n = this.players.length;
+        const nextIndex = (((playerIndex + this.direction) % n) + n) % n;
+        const nextPlayer = this.players[nextIndex];
+        if (nextPlayer && nextPlayer.id !== player.id) {
+          this.drawCards(nextPlayer, amount);
+          this.addLog(`${nextPlayer.name} は上がりの${card.rank}の影響で${amount}枚引きました`);
+        }
+        this.pendingChain = null;
+      }
 
       const deltas = {};
       let totalGain = 0;

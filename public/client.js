@@ -275,10 +275,14 @@ function renderGame(state) {
   oppDiv.innerHTML = '';
   for (const p of others) {
     const div = document.createElement('div');
-    div.className = 'opponent' + (p.id === state.currentPlayerId ? ' active' : '') + (!p.connected ? ' disconnected' : '');
+    div.className =
+      'opponent' +
+      (p.id === state.currentPlayerId ? ' active' : '') +
+      (!p.connected ? ' disconnected' : '') +
+      (p.declaredPageOne ? ' page-one' : '');
     const botTag = p.isBot ? ' 🤖' : '';
-    const tag = p.declaredPageOne ? ' <span class="tag">📢1枚</span>' : '';
-    div.innerHTML = `<div class="oname">${escapeHtml(p.name)}${botTag}${tag}</div><div class="ocount">${p.cardCount}</div><div class="oscore">${p.score}点</div>`;
+    const tag = p.declaredPageOne ? '<div class="page-one-badge">📢 ページワン！</div>' : '';
+    div.innerHTML = `<div class="oname">${escapeHtml(p.name)}${botTag}</div><div class="ocount">${p.cardCount}</div><div class="oscore">${p.score}点</div>${tag}`;
     oppDiv.appendChild(div);
   }
 
@@ -328,7 +332,9 @@ function renderGame(state) {
   if (dealer) info += ` / 親: ${dealer.name}`;
   turnInfo.textContent = info;
 
-  document.getElementById('myName').textContent = me ? `${me.name}(あなた) / ${me.score}点` : '';
+  const myPageOneTag = me && me.declaredPageOne ? ' 📢ページワン！' : '';
+  document.getElementById('myName').textContent = me ? `${me.name}(あなた) / ${me.score}点${myPageOneTag}` : '';
+  document.getElementById('myName').classList.toggle('page-one-self', !!(me && me.declaredPageOne));
 
   const handDiv = document.getElementById('hand');
   handDiv.innerHTML = '';

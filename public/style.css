@@ -109,6 +109,26 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .opponent .oname { font-size: 13px; }
 .opponent .ocount { font-size: 18px; font-weight: bold; }
 .opponent.disconnected { opacity: 0.4; }
+.opponent.page-one {
+  border-color: var(--red);
+  box-shadow: 0 0 8px rgba(230, 65, 46, 0.6);
+  animation: page-one-pulse 1.2s ease-in-out infinite;
+}
+.page-one-badge {
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: bold;
+  color: var(--red);
+  white-space: nowrap;
+}
+#myName.page-one-self {
+  color: var(--red);
+  font-weight: bold;
+}
+@keyframes page-one-pulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(230, 65, 46, 0.4); }
+  50% { box-shadow: 0 0 12px rgba(230, 65, 46, 0.9); }
+}
 
 #table {
   display: flex;
