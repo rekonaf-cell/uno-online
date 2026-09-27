@@ -444,9 +444,12 @@ function renderGame(state) {
         pendingSuitCardId = card.id;
         pendingIsJoker = card.type === 'joker';
         pendingChosenSuit = null;
-        pendingChosenRank = null;
+        // Answering a 2/3 chain, the joker IS that 2/3 — its number isn't a
+        // free choice, so skip the rank chooser and lock it in already.
+        const lockedRank = pendingIsJoker && state.pendingChain ? state.pendingChain.rank : null;
+        pendingChosenRank = lockedRank;
         document.getElementById('suitModal').classList.remove('hidden');
-        document.getElementById('rankChooser').classList.toggle('hidden', !pendingIsJoker);
+        document.getElementById('rankChooser').classList.toggle('hidden', !pendingIsJoker || lockedRank !== null);
       } else {
         socket.emit('playCard', { cardId: card.id });
       }

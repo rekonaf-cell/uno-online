@@ -393,6 +393,12 @@ class Room {
     if (card.type === 'joker' && !(Number.isInteger(rankNum) && rankNum >= 1 && rankNum <= 13)) {
       return { error: '数字を選んでください' };
     }
+    // A joker answering a 2/3 chain IS that 2/3 for this play: its declared
+    // number must match the chain, not some unrelated value the player
+    // could pick just because a joker can normally be "anything".
+    if (card.type === 'joker' && this.pendingChain && rankNum !== this.pendingChain.rank) {
+      return { error: `連続中は数字を${this.pendingChain.rank}にしてください` };
+    }
 
     // A joker keeps its own identity (rank stays null) so it deals and
     // scores normally the next time it's shuffled back in; the discard

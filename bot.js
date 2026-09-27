@@ -83,7 +83,8 @@ function decideTurnAction(room, bot) {
         action: 'play',
         cardId: jokerMatch.id,
         chosenSuit: pickSuit(bot.hand, jokerMatch.id),
-        chosenRank: pickRank(),
+        // The joker IS the chain's 2/3 here, not a free choice.
+        chosenRank: room.pendingChain.rank,
       };
     }
     return { action: 'draw' };
