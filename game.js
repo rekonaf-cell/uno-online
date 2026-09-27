@@ -121,6 +121,7 @@ class Room {
     this.pendingResolve = null; // closure that applies the deferred turn effect once everyone has passed
     this.ronClaimants = []; // player ids who claimed 当たり this pass round, collected until everyone has responded
     this.dosunClaimants = []; // same, for the opening-card ドスン window
+    this.awaitingRonBack = null; // discarder's id while they decide whether to counter a 当たり claimed against them
   }
 
   addPlayer(id, name, isBot = false) {
@@ -195,6 +196,7 @@ class Room {
     this.pendingResolve = null;
     this.ronClaimants = [];
     this.dosunClaimants = [];
+    this.awaitingRonBack = null;
 
     for (const player of this.players) {
       player.hand = this.deck.splice(0, handSize);
@@ -531,6 +533,15 @@ class Room {
 
   resolvePassRound() {
     if (this.ronClaimants.length > 0) {
+      // The discarder just got hit — if their own remaining hand also
+      // matches the rank they discarded, give them a chance to turn the
+      // tables with 当たり返し before the claim is paid out normally.
+      const discarder = this.players.find((p) => p.id === this.lastDiscardPlayerId);
+      if (discarder && canRon(discarder.hand, this.lastDiscardCard.rank)) {
+        this.awaitingRonBack = discarder.id;
+        this.addLog(`${discarder.name} は当たり返しできます`);
+        return;
+      }
       this.finalizeRon();
     } else if (this.dosunClaimants.length > 0) {
       this.finalizeDosun();
@@ -586,6 +597,53 @@ class Room {
 
     const names = winners.map((id) => this.players.find((p) => p.id === id).name).join('・');
     this.addLog(`${names} が当たり！(合計${target}) ${discarder.name}から支払い`);
+  }
+
+  // The discarder turns a 当たり claimed against them into their own win:
+  // each claimant now pays the discarder instead, at double the usual
+  // 当たり rate (4x their hand) as the price of a countered claim.
+  ronBack(playerId) {
+    if (this.awaitingRonBack !== playerId) return { error: '今は当たり返しできません' };
+    const discarder = this.players.find((p) => p.id === playerId);
+    const target = this.lastDiscardCard.rank;
+    const claimants = this.ronClaimants;
+    const deltas = {};
+    let totalGain = 0;
+    for (const claimantId of claimants) {
+      const claimant = this.players.find((p) => p.id === claimantId);
+      const pts = handScore(claimant.hand) * 4;
+      claimant.score -= pts;
+      deltas[claimantId] = (deltas[claimantId] || 0) - pts;
+      totalGain += pts;
+    }
+    discarder.score += totalGain;
+    deltas[discarder.id] = (deltas[discarder.id] || 0) + totalGain;
+
+    this.winnerIds = [discarder.id];
+    this.started = false;
+    this.phase = 'roundEnd';
+    this.lastDiscardCard = null;
+    this.lastDiscardPlayerId = null;
+    this.awaitingPassFrom = [];
+    this.pendingResolve = null;
+    this.ronClaimants = [];
+    this.awaitingRonBack = null;
+    this.lastWinType = 'ronBack';
+    this.lastRoundDeltas = deltas;
+    this.resolveNextDealer([discarder.id]);
+
+    const names = claimants.map((id) => this.players.find((p) => p.id === id).name).join('・');
+    this.addLog(`${discarder.name} が当たり返し！(合計${target}) ${names}から支払い`);
+    return { success: true };
+  }
+
+  // Discarder declines the counter even though they were eligible; the
+  // original 当たり claim(s) are paid out as normal.
+  declineRonBack(playerId) {
+    if (this.awaitingRonBack !== playerId) return { error: '今は当たり返しできません' };
+    this.awaitingRonBack = null;
+    this.finalizeRon();
+    return { success: true };
   }
 
   finalizeDosun() {
@@ -737,6 +795,8 @@ class Room {
         !me.furitenRanks.includes(this.lastDiscardCard.rank) &&
         canRon(me.hand, this.lastDiscardCard.rank)
       ),
+      canRonBack: this.awaitingRonBack === forPlayerId,
+      awaitingRonBack: this.awaitingRonBack,
       phase: this.phase,
       dealerId: this.dealerId,
       diceContenders: this.diceContenders,

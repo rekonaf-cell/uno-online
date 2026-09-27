@@ -36,6 +36,11 @@ function broadcastState(room) {
 // is), then whatever the current turn/dice/hand-size step requires.
 function findNextBotStep(room) {
   if (room.phase === 'playing' && room.winnerIds.length === 0) {
+    if (room.awaitingRonBack) {
+      const bot = room.players.find((p) => p.id === room.awaitingRonBack && p.isBot);
+      if (bot) return { type: 'ronBack', playerId: bot.id };
+      return null; // waiting on a human to decide
+    }
     if (room.dosunAvailable && room.topCard) {
       const bot = room.players.find(
         (p) => p.isBot && room.awaitingPassFrom.includes(p.id) && canRon(p.hand, room.topCard.rank)
@@ -99,6 +104,10 @@ function performBotStep(room, step) {
       break;
     case 'ron':
       room.ron(bot.id);
+      break;
+    case 'ronBack':
+      // Always worth taking: it turns a loss into a bigger win.
+      room.ronBack(bot.id);
       break;
     case 'pass':
       room.pass(bot.id);
@@ -280,6 +289,28 @@ io.on('connection', (socket) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || !room.started) return;
     const result = room.ron(socket.id);
+    if (result.error) {
+      socket.emit('errorMsg', result.error);
+      return;
+    }
+    broadcastState(room);
+  });
+
+  socket.on('ronBack', () => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || !room.started) return;
+    const result = room.ronBack(socket.id);
+    if (result.error) {
+      socket.emit('errorMsg', result.error);
+      return;
+    }
+    broadcastState(room);
+  });
+
+  socket.on('declineRonBack', () => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || !room.started) return;
+    const result = room.declineRonBack(socket.id);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;

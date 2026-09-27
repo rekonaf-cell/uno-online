@@ -116,6 +116,14 @@ document.getElementById('passBtn').addEventListener('click', () => {
   socket.emit('pass');
 });
 
+document.getElementById('ronBackBtn').addEventListener('click', () => {
+  socket.emit('ronBack');
+});
+
+document.getElementById('declineRonBackBtn').addEventListener('click', () => {
+  socket.emit('declineRonBack');
+});
+
 document.getElementById('rollDiceBtn').addEventListener('click', () => {
   socket.emit('rollDice');
 });
@@ -312,11 +320,17 @@ function renderGame(state) {
   }
 
   const awaitingPassFrom = state.awaitingPassFrom || [];
-  const waitingForOthers = awaitingPassFrom.length > 0;
+  const waitingForOthers = awaitingPassFrom.length > 0 || !!state.awaitingRonBack;
   const isMyTurn = state.currentPlayerId === myId && !waitingForOthers;
   const turnInfo = document.getElementById('turnInfo');
   let info = '';
-  if (waitingForOthers) {
+  if (state.awaitingRonBack) {
+    const p = state.players.find((pl) => pl.id === state.awaitingRonBack);
+    info =
+      state.awaitingRonBack === myId
+        ? 'あなたは当たり返しできます！'
+        : `${p ? p.name : ''} が当たり返しできるか確認中…`;
+  } else if (waitingForOthers) {
     const names = awaitingPassFrom
       .map((id) => state.players.find((p) => p.id === id))
       .filter(Boolean)
@@ -392,6 +406,8 @@ function renderGame(state) {
   document.getElementById('pageOneBtn').classList.toggle('hidden', !state.canDeclarePageOne);
   document.getElementById('ronBtn').classList.toggle('hidden', !state.canRon);
   document.getElementById('dosunBtn').classList.toggle('hidden', !state.canDosun);
+  document.getElementById('ronBackBtn').classList.toggle('hidden', !state.canRonBack);
+  document.getElementById('declineRonBackBtn').classList.toggle('hidden', !state.canRonBack);
   document.getElementById('passBtn').classList.toggle('hidden', !state.canPass);
 
   const logBox = document.getElementById('logBox');

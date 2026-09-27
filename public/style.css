@@ -329,6 +329,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .pageone-btn { background: #d21f1f; }
 .ron-btn { background: #b8860b; }
 .dosun-btn { background: #8e2de2; }
+.ronback-btn { background: #d21f1f; box-shadow: 0 0 10px rgba(210, 31, 31, 0.6); }
 .pass-btn { background: #444; }
 
 #diceResultList,
