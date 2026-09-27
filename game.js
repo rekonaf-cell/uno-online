@@ -120,6 +120,8 @@ class Room {
     this.lastWinType = null; // 'normal' | 'ron' | 'dosun'
     this.lastRoundDeltas = null; // { [playerId]: pointChange }
     this.lastScoreBreakdown = null; // { [payerId]: { hand: [card,...], multiplier } } — what produced each payer's loss
+    this.actionSeq = 0;
+    this.lastAction = null; // { type: 'draw'|'play', playerId, seq } — lets the client animate/sound the most recent move once
     this.log = [];
     this.discardHistory = []; // every card played this round, in order, never trimmed by reshuffles
 
@@ -185,6 +187,11 @@ class Room {
   addLog(msg) {
     this.log.push(msg);
     if (this.log.length > 30) this.log.shift();
+  }
+
+  recordAction(type, playerId) {
+    this.actionSeq += 1;
+    this.lastAction = { type, playerId, seq: this.actionSeq };
   }
 
   start(handSize = 7) {
@@ -413,6 +420,7 @@ class Room {
     player.hand.splice(cardIndex, 1);
     this.discardPile.push(discardedCard);
     this.discardHistory.push(discardedCard);
+    this.recordAction('play', playerId);
 
     if (player.hand.length === 0) {
       // The winning card is ron-able just like any other discard — someone
@@ -576,6 +584,7 @@ class Room {
       this.drawCards(player, amount);
       this.addLog(`${player.name} が ${amount}枚引きました`);
       this.pendingChain = null;
+      this.recordAction('draw', playerId);
       this.advanceTurn();
       return { success: true };
     }
@@ -584,6 +593,7 @@ class Room {
     // it would have been legal. Matches the "draw and pass" house rule.
     this.drawCards(player, 1);
     this.addLog(`${player.name} が山札から1枚引きました`);
+    this.recordAction('draw', playerId);
     this.advanceTurn();
     return { success: true };
   }
@@ -864,6 +874,7 @@ class Room {
       // card-by-card count-up (including the 2-doubling step) client-side
       // instead of just showing the final number.
       scoreBreakdown: this.winnerIds.length > 0 ? this.lastScoreBreakdown : null,
+      lastAction: this.lastAction,
       canDeclarePageOne: !!(
         me &&
         me.hand.length === 1 &&

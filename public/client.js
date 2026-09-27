@@ -60,6 +60,114 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// --- 効果音(WebAudioで合成。音声ファイルを持たずに済む) ---
+let audioCtx = null;
+function ensureAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  } catch (e) {
+    return null;
+  }
+}
+// Any real click on the page is a user gesture — use the first one to
+// unlock audio so later socket-driven sounds (a bot's move) aren't blocked.
+document.addEventListener('click', () => ensureAudio(), { once: true });
+
+function noiseBurst(ctx, now, duration, filterType, freqFrom, freqTo, gainPeak) {
+  const bufferSize = Math.floor(ctx.sampleRate * duration);
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+  const noise = ctx.createBufferSource();
+  noise.buffer = buffer;
+  const filter = ctx.createBiquadFilter();
+  filter.type = filterType;
+  filter.frequency.setValueAtTime(freqFrom, now);
+  filter.frequency.exponentialRampToValueAtTime(Math.max(freqTo, 1), now + duration);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(gainPeak, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+  noise.connect(filter).connect(gain).connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + duration);
+}
+
+function playDrawSound() {
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  noiseBurst(ctx, ctx.currentTime, 0.16, 'bandpass', 2200, 500, 0.22);
+}
+
+function playCardSound() {
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  noiseBurst(ctx, now, 0.07, 'highpass', 1800, 1800, 0.3);
+  const osc = ctx.createOscillator();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(700, now);
+  osc.frequency.exponentialRampToValueAtTime(180, now + 0.05);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.12, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.05);
+}
+
+// --- 山札↔プレイヤー間のカードが飛ぶ演出 ---
+function getSeatAvatarEl(playerId) {
+  if (playerId === myId) return document.querySelector('#selfSeat .seat-avatar');
+  return document.querySelector(`.seat[data-player-id="${CSS.escape(playerId)}"] .seat-avatar`);
+}
+
+function flyCard(fromEl, toEl, faceLabel, colorClass) {
+  if (!fromEl || !toEl) return;
+  const fromRect = fromEl.getBoundingClientRect();
+  const toRect = toEl.getBoundingClientRect();
+  const ghost = document.createElement('div');
+  ghost.className = 'fly-card' + (faceLabel ? ' ' + colorClass : ' back');
+  if (faceLabel) ghost.textContent = faceLabel;
+  document.body.appendChild(ghost);
+  const startX = fromRect.left + fromRect.width / 2 - 15;
+  const startY = fromRect.top + fromRect.height / 2 - 21;
+  const endX = toRect.left + toRect.width / 2 - 15;
+  const endY = toRect.top + toRect.height / 2 - 21;
+  ghost.style.left = startX + 'px';
+  ghost.style.top = startY + 'px';
+  requestAnimationFrame(() => {
+    ghost.style.transform = `translate(${endX - startX}px, ${endY - startY}px) rotate(${faceLabel ? -20 : 20}deg)`;
+    ghost.style.opacity = '0';
+  });
+  setTimeout(() => ghost.remove(), 480);
+}
+
+let lastAnimatedActionSeq = null; // null = haven't seen a state yet, so the first one is a join/reload, not a new move
+function handleActionAnimation(state) {
+  const action = state.lastAction;
+  if (!action) return;
+  if (lastAnimatedActionSeq === null) {
+    lastAnimatedActionSeq = action.seq;
+    return;
+  }
+  if (action.seq === lastAnimatedActionSeq) return;
+  lastAnimatedActionSeq = action.seq;
+
+  const avatar = getSeatAvatarEl(action.playerId);
+  const pile = document.getElementById('drawPile');
+  const center = document.getElementById('historyStack');
+  if (action.type === 'draw') {
+    playDrawSound();
+    flyCard(pile, avatar, null, null);
+  } else if (action.type === 'play') {
+    playCardSound();
+    const card = state.topCard;
+    flyCard(avatar, center, card ? cardLabel(card) : '', card ? cardColorClass(card) : '');
+  }
+}
+
 // Mirrors game.js's cardPointValue()/handScore(): A/3/joker=10, J/Q/K keep
 // their rank, 2 contributes nothing on its own but doubles everything else.
 function cardPointValue(card) {
@@ -364,6 +472,7 @@ function render(state) {
   }
   if (winnerIds.length > 0) {
     renderGame(state);
+    handleActionAnimation(state);
     const winners = winnerIds.map((id) => state.players.find((p) => p.id === id)).filter(Boolean);
     const winKindText =
       state.lastWinType === 'ron' ? '（当たり！）' : state.lastWinType === 'dosun' ? '（ドン！）' : '';
@@ -427,6 +536,7 @@ function render(state) {
   }
   showScreen('game');
   renderGame(state);
+  handleActionAnimation(state);
 }
 
 function renderWaiting(state) {
@@ -530,6 +640,7 @@ function renderGame(state) {
       (p.declaredPageOne ? ' page-one' : '');
     div.style.left = leftPct + '%';
     div.style.top = topPct + '%';
+    div.dataset.playerId = p.id;
     const botTag = p.isBot ? ' 🤖' : '👤';
     const dealerTag = p.id === state.dealerId ? '<div class="dealer-tag">親</div>' : '';
     const tag = p.declaredPageOne ? '<div class="page-one-badge">📢</div>' : '';

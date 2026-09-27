@@ -234,7 +234,11 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   background: #f5f0e6;
   display: flex;
   align-items: center;
-  justify-content: center;
+  /* The card in front covers everything except this card's right sliver,
+     so the label has to sit inside that sliver — a centered label would
+     always land under the cover and read as a blank card. */
+  justify-content: flex-end;
+  padding-right: 4px;
   font-weight: 700;
   color: #1a1a1a;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
@@ -245,15 +249,17 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   background: linear-gradient(135deg, var(--red), var(--yellow), var(--green), var(--blue));
   color: white;
 }
-.hist-card.depth-3 { left: 62px; top: 22px; width: 34px; height: 48px; opacity: 0.45; transform: rotate(9deg); font-size: 10px; }
-.hist-card.depth-2 { left: 46px; top: 18px; width: 38px; height: 54px; opacity: 0.65; transform: rotate(7deg); font-size: 11px; }
-.hist-card.depth-1 { left: 26px; top: 12px; width: 44px; height: 62px; opacity: 0.85; transform: rotate(4deg); font-size: 12px; }
+.hist-card.depth-3 { left: 62px; top: 22px; width: 34px; height: 48px; opacity: 0.55; font-size: 10px; }
+.hist-card.depth-2 { left: 46px; top: 18px; width: 38px; height: 54px; opacity: 0.72; font-size: 11px; }
+.hist-card.depth-1 { left: 26px; top: 12px; width: 44px; height: 62px; opacity: 0.88; font-size: 12px; }
 .hist-card.depth-0 {
   left: 0;
   top: 4px;
   width: 56px;
   height: 80px;
   font-size: 20px;
+  justify-content: center;
+  padding-right: 0;
   border: 2px solid var(--gold);
   box-shadow: 0 0 0 2px rgba(201, 162, 39, 0.5), 0 8px 14px rgba(0, 0, 0, 0.55);
   z-index: 5;
@@ -638,4 +644,34 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   border-radius: 20px;
   font-size: 14px;
   z-index: 20;
+}
+
+/* 山札↔プレイヤー間を飛ぶカード(引く/出すの演出)。 */
+.fly-card {
+  position: fixed;
+  width: 30px;
+  height: 42px;
+  border-radius: 4px;
+  z-index: 999;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+  transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.3, 1), opacity 0.45s ease;
+  opacity: 1;
+}
+.fly-card.back {
+  background: repeating-linear-gradient(45deg, #333, #333 4px, #222 4px, #222 8px);
+  border: 1px solid #555;
+}
+.fly-card.red-suit { background: #f5f0e6; color: #d21f1f; border: 1px solid rgba(255, 255, 255, 0.2); }
+.fly-card.black-suit { background: #f5f0e6; color: #1a1a1a; border: 1px solid rgba(255, 255, 255, 0.2); }
+.fly-card.joker {
+  background: linear-gradient(135deg, var(--red), var(--yellow), var(--green), var(--blue));
+  color: white;
+  font-size: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
