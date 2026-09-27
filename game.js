@@ -119,6 +119,7 @@ class Room {
     this.lastDiscardPlayerId = null;
     this.lastWinType = null; // 'normal' | 'ron' | 'dosun'
     this.lastRoundDeltas = null; // { [playerId]: pointChange }
+    this.lastScoreBreakdown = null; // { [payerId]: { hand: [card,...], multiplier } } — what produced each payer's loss
     this.log = [];
     this.discardHistory = []; // every card played this round, in order, never trimmed by reshuffles
 
@@ -203,6 +204,7 @@ class Room {
     this.lastDiscardPlayerId = null;
     this.lastWinType = null;
     this.lastRoundDeltas = null;
+    this.lastScoreBreakdown = null;
     this.log = [];
     this.discardHistory = [];
     this.awaitingPassFrom = [];
@@ -258,6 +260,7 @@ class Room {
     this.winnerIds = [];
     this.lastWinType = null;
     this.lastRoundDeltas = null;
+    this.lastScoreBreakdown = null;
     if (this.dealerId === null) {
       let contenders;
       if (this.nextDealerCandidates && this.nextDealerCandidates.length > 0) {
@@ -456,18 +459,21 @@ class Room {
         }
 
         const deltas = {};
+        const breakdown = {};
         let totalGain = 0;
         for (const other of this.players) {
           if (other.id === player.id) continue;
           const pts = handScore(other.hand);
           other.score -= pts;
           deltas[other.id] = -pts;
+          breakdown[other.id] = { hand: [...other.hand], multiplier: 1 };
           totalGain += pts;
         }
         player.score += totalGain;
         deltas[player.id] = totalGain;
         this.lastWinType = 'normal';
         this.lastRoundDeltas = deltas;
+        this.lastScoreBreakdown = breakdown;
 
         this.addLog(`${player.name} が上がりました！(+${totalGain}点)`);
       };
@@ -657,6 +663,12 @@ class Room {
     this.ronClaimants = [];
     this.lastWinType = 'ron';
     this.lastRoundDeltas = deltas;
+    // Simultaneous winners each get paid separately off the same hand, so
+    // the discarder's total loss is this calculation repeated once per
+    // winner — the animation needs that payments count to land correctly.
+    this.lastScoreBreakdown = {
+      [discarder.id]: { hand: discarderScoringHand, multiplier: 2, payments: winners.length },
+    };
     this.resolveNextDealer(winners);
 
     const names = winners.map((id) => this.players.find((p) => p.id === id).name).join('・');
@@ -672,12 +684,14 @@ class Room {
     const target = discardRank(this.lastDiscardCard);
     const claimants = this.ronClaimants;
     const deltas = {};
+    const breakdown = {};
     let totalGain = 0;
     for (const claimantId of claimants) {
       const claimant = this.players.find((p) => p.id === claimantId);
       const pts = handScore(claimant.hand) * 4;
       claimant.score -= pts;
       deltas[claimantId] = (deltas[claimantId] || 0) - pts;
+      breakdown[claimantId] = { hand: [...claimant.hand], multiplier: 4 };
       totalGain += pts;
     }
     discarder.score += totalGain;
@@ -694,6 +708,7 @@ class Room {
     this.awaitingRonBack = null;
     this.lastWinType = 'ronBack';
     this.lastRoundDeltas = deltas;
+    this.lastScoreBreakdown = breakdown;
     this.resolveNextDealer([discarder.id]);
 
     const names = claimants.map((id) => this.players.find((p) => p.id === id).name).join('・');
@@ -714,6 +729,7 @@ class Room {
     const target = this.topCard.rank;
     const winners = this.dosunClaimants;
     const deltas = {};
+    const breakdown = {};
     for (const winnerId of winners) {
       const winner = this.players.find((p) => p.id === winnerId);
       for (const other of this.players) {
@@ -721,6 +737,9 @@ class Room {
         const pts = handScore(other.hand) * 2;
         other.score -= pts;
         deltas[other.id] = (deltas[other.id] || 0) - pts;
+        // Same hand pays every simultaneous ドン winner separately, so the
+        // payments count (not just the multiplier) has to be captured too.
+        breakdown[other.id] = { hand: [...other.hand], multiplier: 2, payments: winners.length };
         winner.score += pts;
         deltas[winnerId] = (deltas[winnerId] || 0) + pts;
       }
@@ -733,6 +752,7 @@ class Room {
     this.awaitingPassFrom = [];
     this.pendingResolve = null;
     this.dosunClaimants = [];
+    this.lastScoreBreakdown = breakdown;
     this.lastWinType = 'dosun';
     this.lastRoundDeltas = deltas;
     this.resolveNextDealer(winners);
@@ -840,6 +860,10 @@ class Room {
               this.winnerIds.map((id) => [id, this.players.find((p) => p.id === id)?.hand || []])
             )
           : null,
+      // What produced each payer's point loss, for animating the
+      // card-by-card count-up (including the 2-doubling step) client-side
+      // instead of just showing the final number.
+      scoreBreakdown: this.winnerIds.length > 0 ? this.lastScoreBreakdown : null,
       canDeclarePageOne: !!(
         me &&
         me.hand.length === 1 &&

@@ -478,6 +478,89 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   font-size: 8px;
 }
 
+/* 得点計算の演出: 手札を1枚ずつ数えてオドメーターで合計が伸びる。2は
+   最後に回され、少し間を置いてから合計を倍にする特別演出になる。 */
+#scoreAnims { margin-top: 4px; }
+.score-anim-row { margin-bottom: 14px; }
+.score-anim-label { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.score-anim-label b { color: var(--text); }
+.score-stage {
+  position: relative;
+  height: 76px;
+  border-radius: 8px;
+  background: radial-gradient(circle at 50% 30%, #14513d 0%, #0a2b21 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.score-anim-total {
+  text-align: center;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--yellow);
+  font-variant-numeric: tabular-nums;
+}
+.score-anim-total .odowrap { display: inline-block; overflow: hidden; height: 26px; vertical-align: bottom; }
+/* transform is a no-op on inline elements, so this must render as a block
+   even though it sits inside the inline-block wrapper above. */
+.score-anim-total .digits { display: block; transition: transform 0.5s cubic-bezier(0.3, 1, 0.3, 1); }
+.score-anim-total .digits div { height: 26px; line-height: 26px; }
+.anim-card {
+  width: 36px;
+  height: 50px;
+  border-radius: 5px;
+  background: #f5f0e6;
+  color: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 13px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+  opacity: 0;
+  transform: scale(0.3);
+  transition: transform 0.35s cubic-bezier(0.34, 1.8, 0.5, 1), opacity 0.2s;
+}
+.anim-card.show { opacity: 1; transform: scale(1); }
+.anim-card.red-suit { color: #d21f1f; }
+.anim-card.black-suit { color: #1a1a1a; }
+.anim-card.joker {
+  background: linear-gradient(135deg, var(--red), var(--yellow), var(--green), var(--blue));
+  color: white;
+  font-size: 8px;
+}
+.anim-card.two { border: 2px solid var(--red); box-shadow: 0 0 12px rgba(230, 65, 46, 0.7); }
+.anim-confetti {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  pointer-events: none;
+  opacity: 0;
+}
+.anim-double-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle, rgba(230, 65, 46, 0.9), rgba(242, 193, 46, 0.45) 55%, transparent 78%);
+}
+.anim-double-text {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 22px;
+  font-weight: 900;
+  color: #fff;
+  pointer-events: none;
+  text-shadow: 0 0 10px rgba(230, 65, 46, 0.9), 0 0 22px rgba(242, 193, 46, 0.85);
+}
+
 #diceResultList,
 #roundResultList {
   list-style: none;

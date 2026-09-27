@@ -56,6 +56,154 @@ function cardColorClass(card) {
   return redSuits.includes(card.suit) ? 'red-suit' : 'black-suit';
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Mirrors game.js's cardPointValue()/handScore(): A/3/joker=10, J/Q/K keep
+// their rank, 2 contributes nothing on its own but doubles everything else.
+function cardPointValue(card) {
+  if (card.type === 'joker') return 10;
+  if (card.rank === 1) return 10;
+  if (card.rank === 3) return 10;
+  if (card.rank === 2) return 0;
+  return card.rank;
+}
+
+function orderForScoring(hand) {
+  return [...hand.filter((c) => c.rank !== 2), ...hand.filter((c) => c.rank === 2)];
+}
+
+let scoreAnimGeneration = 0;
+let lastScoreAnimSignature = null;
+
+function burstConfetti(stage, x, y) {
+  const colors = ['#f2c12e', '#e6412e', '#3a9b4c', '#2a6fdb', '#c9a227'];
+  for (let i = 0; i < 10; i++) {
+    const p = document.createElement('div');
+    p.className = 'anim-confetti';
+    p.style.left = x + 'px';
+    p.style.top = y + 'px';
+    p.style.background = colors[i % colors.length];
+    stage.appendChild(p);
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 24 + Math.random() * 24;
+    const dx = Math.cos(angle) * dist;
+    const dy = Math.sin(angle) * dist;
+    p.animate(
+      [{ transform: 'translate(0,0)', opacity: 1 }, { transform: `translate(${dx}px, ${dy}px)`, opacity: 0 }],
+      { duration: 450, easing: 'ease-out' }
+    );
+    setTimeout(() => p.remove(), 470);
+  }
+}
+
+async function doubleBurst(stage, label) {
+  const flash = document.createElement('div');
+  flash.className = 'anim-double-flash';
+  stage.appendChild(flash);
+  const burst = document.createElement('div');
+  burst.className = 'anim-double-text';
+  burst.textContent = label;
+  stage.appendChild(burst);
+  flash.animate([{ opacity: 0 }, { opacity: 0.6, offset: 0.3 }, { opacity: 0 }], { duration: 500, easing: 'ease-out' });
+  burst.animate(
+    [
+      { transform: 'translate(-50%,-50%) scale(0.4)', opacity: 0 },
+      { transform: 'translate(-50%,-50%) scale(1.2)', opacity: 1, offset: 0.4 },
+      { transform: 'translate(-50%,-50%) scale(1)', opacity: 1, offset: 0.75 },
+      { transform: 'translate(-50%,-50%) scale(1)', opacity: 0 },
+    ],
+    { duration: 650, easing: 'ease-out' }
+  );
+  await sleep(600);
+  flash.remove();
+  burst.remove();
+}
+
+// Plays one payer's hand counting up to their point loss, card by card —
+// the 2 always lands last with a pause and a red flash/burst before it
+// doubles the running total, then any extra 当たり/ドン/当たり返し
+// multiplier gets its own burst at the end.
+async function playScoreBreakdown(container, payerName, breakdown, gen) {
+  const row = document.createElement('div');
+  row.className = 'score-anim-row';
+  row.innerHTML =
+    `<div class="score-anim-label"><b>${escapeHtml(payerName)}</b> の支払い計算</div>` +
+    `<div class="score-stage"></div>` +
+    `<div class="score-anim-total"><span class="odowrap"><span class="digits"><div>0</div></span></span><span class="pt">点</span></div>`;
+  container.appendChild(row);
+  const stage = row.querySelector('.score-stage');
+  const digits = row.querySelector('.digits');
+
+  function pushDigit(v) {
+    const d = document.createElement('div');
+    d.textContent = v;
+    digits.appendChild(d);
+    digits.style.transform = `translateY(-${(digits.children.length - 1) * 26}px)`;
+  }
+
+  let total = 0;
+  for (const card of orderForScoring(breakdown.hand)) {
+    if (scoreAnimGeneration !== gen) return;
+    const isTwo = card.rank === 2;
+    // A beat of silence before the 2 shows up builds suspense for the
+    // double — the reveal lands harder after a pause than back-to-back.
+    if (isTwo) await sleep(700);
+    const c = document.createElement('div');
+    c.className = 'anim-card ' + cardColorClass(card) + (isTwo ? ' two' : '');
+    c.textContent = cardLabel(card);
+    stage.appendChild(c);
+    await sleep(25);
+    c.classList.add('show');
+    const r = c.getBoundingClientRect();
+    const sr = stage.getBoundingClientRect();
+    burstConfetti(stage, r.left - sr.left + r.width / 2, r.top - sr.top + r.height / 2);
+    if (isTwo) {
+      await doubleBurst(stage, '×2');
+      const doubled = total * 2;
+      for (const f of [Math.max(1, Math.round(total * 1.4)), Math.max(1, Math.round(total * 1.8)), doubled]) {
+        pushDigit(f);
+        await sleep(85);
+      }
+      total = doubled;
+    } else {
+      total += cardPointValue(card);
+      pushDigit(total);
+    }
+    await sleep(380);
+  }
+  if (breakdown.multiplier > 1) {
+    if (scoreAnimGeneration !== gen) return;
+    await sleep(300);
+    await doubleBurst(stage, `×${breakdown.multiplier}`);
+    total *= breakdown.multiplier;
+    pushDigit(total);
+  }
+  // Simultaneous winners each get paid this same amount separately, so the
+  // payer's real total is this figure repeated once per winner.
+  const payments = breakdown.payments || 1;
+  if (payments > 1) {
+    if (scoreAnimGeneration !== gen) return;
+    await sleep(300);
+    await doubleBurst(stage, `×${payments}人`);
+    total *= payments;
+    pushDigit(total);
+  }
+}
+
+async function playAllScoreAnims(state, gen) {
+  const container = document.getElementById('scoreAnims');
+  container.innerHTML = '';
+  if (!state.scoreBreakdown) return;
+  for (const p of state.players) {
+    if (scoreAnimGeneration !== gen) return;
+    const breakdown = state.scoreBreakdown[p.id];
+    if (!breakdown) continue;
+    await playScoreBreakdown(container, p.name, breakdown, gen);
+  }
+}
+
 function showToast(msg) {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
@@ -223,6 +371,16 @@ function render(state) {
     document.getElementById('winText').textContent = winnerNames
       ? `${winnerNames} の勝ち！🎉${winKindText}`
       : 'ゲーム終了';
+
+    // Only (re)play the scoring animation once per round end — a re-render
+    // triggered by something unrelated (a reconnect, a log update) while
+    // the modal is still up must not restart it from scratch.
+    const scoreSig = winnerIds.join(',') + '|' + state.lastWinType + '|' + JSON.stringify(state.lastRoundDeltas);
+    if (scoreSig !== lastScoreAnimSignature) {
+      lastScoreAnimSignature = scoreSig;
+      scoreAnimGeneration += 1;
+      playAllScoreAnims(state, scoreAnimGeneration);
+    }
 
     const revealedDiv = document.getElementById('revealedHands');
     revealedDiv.innerHTML = '';
