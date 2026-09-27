@@ -60,21 +60,16 @@
     <section id="game" class="screen hidden">
       <div id="roundTable">
         <div id="dirBadge">↻</div>
+        <div class="deck-pile" id="drawPile"><span id="deckCount"></span></div>
         <div id="tableSeats"></div>
         <div id="tableCenter">
-          <div class="deck-pile" id="drawPile">山札<br><span id="deckCount"></span></div>
-          <div id="discardTop" class="card"></div>
+          <div id="historyStack"></div>
         </div>
         <div id="selfSeat">
-          <div class="seat-avatar self">😊</div>
+          <div class="seat-avatar self" id="selfAvatarWrap">😊<div class="count-badge" id="selfCountBadge">0</div></div>
         </div>
       </div>
       <div id="turnInfo"></div>
-
-      <div id="historyArea">
-        <div class="history-label">履歴</div>
-        <div id="historyStrip"></div>
-      </div>
 
       <div id="myArea">
         <div id="myName"></div>

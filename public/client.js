@@ -19,9 +19,9 @@ let pendingChosenSuit = null;
 let pendingChosenRank = null;
 let raisedCardId = null; // fanned hand: card the player tapped to preview before playing
 
-const HAND_CARD_WIDTH = 64;
+const HAND_CARD_WIDTH = 68;
 const HAND_CARD_GAP = 6;
-const HAND_MIN_PEEK = 26; // narrowest sliver a covered card can be overlapped down to
+const HAND_MIN_PEEK = 36; // narrowest sliver a covered card can be overlapped down to — kept large enough to tap reliably
 
 const suitSymbols = { spade: '♠', heart: '♥', diamond: '♦', club: '♣' };
 const suitNames = { spade: 'スペード', heart: 'ハート', diamond: 'ダイヤ', club: 'クラブ' };
@@ -356,9 +356,9 @@ function renderGame(state) {
     const dealerTag = p.id === state.dealerId ? '<div class="dealer-tag">親</div>' : '';
     const tag = p.declaredPageOne ? '<div class="page-one-badge">📢</div>' : '';
     div.innerHTML =
-      `<div class="seat-avatar">${botTag}${dealerTag}</div>` +
+      `<div class="seat-avatar">${botTag}${dealerTag}<div class="count-badge">${p.cardCount}</div></div>` +
       `<div class="sname">${escapeHtml(p.name)}</div>` +
-      `<div class="sinfo">${p.cardCount}枚・${p.score}点</div>${tag}`;
+      `<div class="sinfo">${p.score}点</div>${tag}`;
     seatsDiv.appendChild(div);
   });
 
@@ -377,27 +377,25 @@ function renderGame(state) {
       existingDealerTag.remove();
     }
   }
+  const selfCountBadge = document.getElementById('selfCountBadge');
+  if (selfCountBadge) selfCountBadge.textContent = (state.myHand || []).length;
 
-  const discardTop = document.getElementById('discardTop');
-  if (state.topCard) {
-    discardTop.className = 'card ' + cardColorClass(state.topCard);
-    discardTop.textContent = cardLabel(state.topCard);
-  }
   document.getElementById('deckCount').textContent = state.deckCount;
 
-  const historyStrip = document.getElementById('historyStrip');
-  historyStrip.innerHTML = '';
-  const history = state.discardHistory || [];
-  const HISTORY_DISPLAY_LIMIT = 5;
-  let zIndex = history.length;
-  for (let i = history.length - 1; i >= Math.max(0, history.length - HISTORY_DISPLAY_LIMIT); i--) {
-    const card = history[i];
+  // Center of the table: the current card sits large and gold-bordered in
+  // front, with up to 3 earlier discards fanned smaller behind it — the
+  // "history" and "what's live now" are the same stack, just by size.
+  const stackDiv = document.getElementById('historyStack');
+  stackDiv.innerHTML = '';
+  const HISTORY_DEPTH = 4;
+  const recent = (state.discardHistory || []).slice(-HISTORY_DEPTH);
+  recent.forEach((card, i) => {
+    const depth = recent.length - 1 - i; // 0 = current card, higher = older
     const div = document.createElement('div');
-    div.className = 'history-card ' + cardColorClass(card);
-    div.style.zIndex = zIndex--;
+    div.className = `hist-card depth-${depth} ` + cardColorClass(card);
     div.textContent = historyCardLabel(card);
-    historyStrip.appendChild(div);
-  }
+    stackDiv.appendChild(div);
+  });
 
   const awaitingPassFrom = state.awaitingPassFrom || [];
   const waitingForOthers = awaitingPassFrom.length > 0 || !!state.awaitingRonBack;
