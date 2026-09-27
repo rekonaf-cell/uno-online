@@ -35,15 +35,18 @@ function broadcastState(room) {
 // dosun/ron interrupts first (they can fire regardless of whose turn it
 // is), then whatever the current turn/dice/hand-size step requires.
 function findNextBotStep(room) {
-  if (room.phase === 'playing' && !room.winnerId) {
+  if (room.phase === 'playing' && room.winnerIds.length === 0) {
     if (room.dosunAvailable && room.topCard) {
-      const bot = room.players.find((p) => p.isBot && canRon(p.hand, room.topCard.rank));
+      const bot = room.players.find(
+        (p) => p.isBot && room.awaitingPassFrom.includes(p.id) && canRon(p.hand, room.topCard.rank)
+      );
       if (bot) return { type: 'dosun', playerId: bot.id };
     }
     if (room.lastDiscardCard) {
       const bot = room.players.find(
         (p) =>
           p.isBot &&
+          room.awaitingPassFrom.includes(p.id) &&
           p.id !== room.lastDiscardPlayerId &&
           !p.furitenRanks.includes(room.lastDiscardCard.rank) &&
           canRon(p.hand, room.lastDiscardCard.rank)

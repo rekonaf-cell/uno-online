@@ -27,11 +27,23 @@ function pickSuit(hand, excludeCardId) {
   return best;
 }
 
+// Would playing `card` right now be legal, given that it might be the
+// bot's very last card? cardMatches() only checks placement, not the
+// separate win-eligibility rules (joker can never finish; a normal card
+// needs a prior page-one declaration; only 8 is exempt).
+function legalToPlay(bot, card) {
+  if (bot.hand.length !== 1) return true;
+  if (!canFinishWith(card)) return false;
+  if (card.rank !== 8 && !bot.declaredPageOne) return false;
+  return true;
+}
+
 function choosePlay(playable, bot) {
-  const winners = playable.filter(
-    (c) => bot.hand.length === 1 && canFinishWith(c) && (c.rank === 8 || bot.declaredPageOne)
-  );
-  const pickFrom = winners.length > 0 ? winners : playable;
+  const legal = playable.filter((c) => legalToPlay(bot, c));
+  if (legal.length === 0) return { action: 'draw' };
+
+  const winners = legal.filter((c) => bot.hand.length === 1);
+  const pickFrom = winners.length > 0 ? winners : legal;
 
   const normals = pickFrom.filter((c) => c.type === 'normal' && c.rank !== 8);
   const pool = normals.length > 0 ? normals : pickFrom;
@@ -47,7 +59,7 @@ function choosePlay(playable, bot) {
 // What should a bot do on its own turn, before drawing?
 function decideTurnAction(room, bot) {
   if (room.pendingChain) {
-    const rankMatch = bot.hand.find((c) => c.rank === room.pendingChain.rank);
+    const rankMatch = bot.hand.find((c) => c.rank === room.pendingChain.rank && legalToPlay(bot, c));
     if (rankMatch) return { action: 'play', cardId: rankMatch.id };
     // A joker can answer the chain too, but never as a lone last card —
     // that would be an illegal "win" with a joker.
@@ -67,7 +79,8 @@ function decideTurnAction(room, bot) {
 function decideAfterDraw(room, bot) {
   const playable = bot.hand.filter((c) => cardMatches(c, room.topCard, room.currentSuit));
   if (playable.length === 0) return { action: 'endTurn' };
-  return choosePlay(playable, bot);
+  const decision = choosePlay(playable, bot);
+  return decision.action === 'draw' ? { action: 'endTurn' } : decision;
 }
 
 module.exports = { decideTurnAction, decideAfterDraw };

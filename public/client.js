@@ -144,25 +144,28 @@ socket.on('state', (state) => {
 });
 
 function render(state) {
-  // Always start from a clean slate: only the winnerId branch below turns
+  // Always start from a clean slate: only the winnerIds branch below turns
   // this back on. Without this, the modal could stay stuck on screen when
   // moving from "round just ended" into the dice/hand-size phase for the
-  // next round, since that transition clears winnerId but isn't the
+  // next round, since that transition clears winnerIds but isn't the
   // branch that explicitly hides it.
   document.getElementById('winModal').classList.add('hidden');
 
-  if (!state.started && !state.winnerId) {
+  const winnerIds = state.winnerIds || [];
+
+  if (!state.started && winnerIds.length === 0) {
     showScreen('waiting');
     renderWaiting(state);
     return;
   }
-  if (state.winnerId) {
+  if (winnerIds.length > 0) {
     renderGame(state);
-    const winner = state.players.find((p) => p.id === state.winnerId);
+    const winners = winnerIds.map((id) => state.players.find((p) => p.id === id)).filter(Boolean);
     const winKindText =
-      state.lastWinType === 'ron' ? '（ロン！）' : state.lastWinType === 'dosun' ? '（ドスン！）' : '';
-    document.getElementById('winText').textContent = winner
-      ? `${winner.name} の勝ち！🎉${winKindText}`
+      state.lastWinType === 'ron' ? '（当たり！）' : state.lastWinType === 'dosun' ? '（ドスン！）' : '';
+    const winnerNames = winners.map((w) => w.name).join('・');
+    document.getElementById('winText').textContent = winnerNames
+      ? `${winnerNames} の勝ち！🎉${winKindText}`
       : 'ゲーム終了';
 
     const resultList = document.getElementById('roundResultList');
@@ -310,7 +313,7 @@ function renderGame(state) {
       .filter(Boolean)
       .map((p) => p.name)
       .join('・');
-    info = `${names} の確認待ち(通す/ロン/ドスン)`;
+    info = `${names} の確認待ち(通す/当たり/ドスン)`;
   } else if (state.currentPlayerId === myId) {
     info = 'あなたの番です';
   } else {

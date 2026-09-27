@@ -98,7 +98,7 @@ class Room {
     this.currentPlayerIndex = 0;
     this.direction = 1;
     this.started = false;
-    this.winnerId = null;
+    this.winnerIds = []; // usually one id, but simultaneous 当たり can produce several
     this.pendingDraw = false; // player drew a free card this turn (no active chain) and hasn't acted yet
     this.pendingChain = null; // { rank: 2|3, amount: N }
     this.lastDiscardCard = null; // most recent discard, ron-able until superseded
@@ -110,14 +110,17 @@ class Room {
 
     this.phase = 'lobby'; // 'lobby' | 'dice' | 'handSize' | 'playing' | 'roundEnd'
     this.dealerId = null;
+    this.nextDealerCandidates = null; // set when several players won at once; next dice-off is limited to them
     this.diceContenders = [];
     this.diceRolls = {}; // { [playerId]: { d1, d2, total } }
     this.diceRollPending = [];
     this.dosunAvailable = false;
     this.botCounter = 0;
 
-    this.awaitingPassFrom = []; // player ids who still must pass/ron/dosun before the pending turn effect resolves
+    this.awaitingPassFrom = []; // player ids who still must pass/当たり/dosun before the pending turn effect resolves
     this.pendingResolve = null; // closure that applies the deferred turn effect once everyone has passed
+    this.ronClaimants = []; // player ids who claimed 当たり this pass round, collected until everyone has responded
+    this.dosunClaimants = []; // same, for the opening-card ドスン window
   }
 
   addPlayer(id, name, isBot = false) {
@@ -175,7 +178,7 @@ class Room {
     this.currentPlayerIndex = 0;
     this.started = true;
     this.phase = 'playing';
-    this.winnerId = null;
+    this.winnerIds = [];
     this.pendingDraw = false;
     this.pendingChain = null;
     this.lastDiscardCard = null;
@@ -186,6 +189,8 @@ class Room {
     this.discardHistory = [];
     this.awaitingPassFrom = [];
     this.pendingResolve = null;
+    this.ronClaimants = [];
+    this.dosunClaimants = [];
 
     for (const player of this.players) {
       player.hand = this.deck.splice(0, handSize);
@@ -231,11 +236,24 @@ class Room {
   // Kicks off the pre-round sequence: a dice-off to pick the very first
   // dealer, or (once a dealer already exists) straight to hand-size choice.
   beginRound() {
-    this.winnerId = null;
+    this.winnerIds = [];
     this.lastWinType = null;
     this.lastRoundDeltas = null;
     if (this.dealerId === null) {
-      const contenders = this.players.filter((p) => p.connected).map((p) => p.id);
+      let contenders;
+      if (this.nextDealerCandidates && this.nextDealerCandidates.length > 0) {
+        contenders = this.nextDealerCandidates.filter((id) => this.players.find((p) => p.id === id)?.connected);
+      } else {
+        contenders = this.players.filter((p) => p.connected).map((p) => p.id);
+      }
+      this.nextDealerCandidates = null;
+      if (contenders.length === 1) {
+        this.dealerId = contenders[0];
+        this.phase = 'handSize';
+        const dealerName = this.players.find((p) => p.id === contenders[0]).name;
+        this.addLog(`${dealerName} が親です。配る枚数を選んでください`);
+        return { success: true };
+      }
       if (contenders.length < 2) return { error: '2人以上必要です' };
       this.phase = 'dice';
       this.diceContenders = contenders;
@@ -357,7 +375,7 @@ class Room {
     this.pendingDraw = false;
 
     if (player.hand.length === 0) {
-      this.winnerId = player.id;
+      this.winnerIds = [player.id];
       this.started = false;
       this.phase = 'roundEnd';
       this.dealerId = player.id;
@@ -478,20 +496,104 @@ class Room {
     return { success: true };
   }
 
-  // A player declines to ron the current discard (or dosun the opening
-  // card). Once everyone who was asked has passed, the deferred turn
-  // effect from the triggering play finally resolves.
+  // A player declines to claim 当たり on the current discard (or ドスン on
+  // the opening card). Once everyone who was asked has responded — pass or
+  // claim — the round is settled: by anyone who claimed, or otherwise the
+  // deferred turn effect from the triggering play.
   pass(playerId) {
     if (!this.awaitingPassFrom.includes(playerId)) {
       return { error: '通す必要はありません' };
     }
     this.awaitingPassFrom = this.awaitingPassFrom.filter((id) => id !== playerId);
-    if (this.awaitingPassFrom.length === 0 && this.pendingResolve) {
+    if (this.awaitingPassFrom.length === 0) this.resolvePassRound();
+    return { success: true };
+  }
+
+  resolvePassRound() {
+    if (this.ronClaimants.length > 0) {
+      this.finalizeRon();
+    } else if (this.dosunClaimants.length > 0) {
+      this.finalizeDosun();
+    } else if (this.pendingResolve) {
       const resolve = this.pendingResolve;
       this.pendingResolve = null;
       resolve();
     }
-    return { success: true };
+  }
+
+  // Whoever won becomes the next dealer directly; if several tied for the
+  // win, the next dealer is decided by a dice-off restricted to just them.
+  resolveNextDealer(winnerIds) {
+    if (winnerIds.length === 1) {
+      this.dealerId = winnerIds[0];
+      this.nextDealerCandidates = null;
+    } else {
+      this.dealerId = null;
+      this.nextDealerCandidates = [...winnerIds];
+    }
+  }
+
+  finalizeRon() {
+    const discarder = this.players.find((p) => p.id === this.lastDiscardPlayerId);
+    const target = this.lastDiscardCard.rank;
+    const winners = this.ronClaimants;
+    const deltas = {};
+    let discarderLoss = 0;
+    for (const winnerId of winners) {
+      const winner = this.players.find((p) => p.id === winnerId);
+      const pts = handScore(discarder.hand) * 2;
+      winner.score += pts;
+      deltas[winnerId] = (deltas[winnerId] || 0) + pts;
+      discarderLoss += pts;
+    }
+    discarder.score -= discarderLoss;
+    deltas[discarder.id] = (deltas[discarder.id] || 0) - discarderLoss;
+
+    this.winnerIds = [...winners];
+    this.started = false;
+    this.phase = 'roundEnd';
+    this.lastDiscardCard = null;
+    this.lastDiscardPlayerId = null;
+    this.awaitingPassFrom = [];
+    this.pendingResolve = null;
+    this.ronClaimants = [];
+    this.lastWinType = 'ron';
+    this.lastRoundDeltas = deltas;
+    this.resolveNextDealer(winners);
+
+    const names = winners.map((id) => this.players.find((p) => p.id === id).name).join('・');
+    this.addLog(`${names} が当たり！(合計${target}) ${discarder.name}から支払い`);
+  }
+
+  finalizeDosun() {
+    const target = this.topCard.rank;
+    const winners = this.dosunClaimants;
+    const deltas = {};
+    for (const winnerId of winners) {
+      const winner = this.players.find((p) => p.id === winnerId);
+      for (const other of this.players) {
+        if (winners.includes(other.id)) continue; // winners don't pay each other
+        const pts = handScore(other.hand) * 2;
+        other.score -= pts;
+        deltas[other.id] = (deltas[other.id] || 0) - pts;
+        winner.score += pts;
+        deltas[winnerId] = (deltas[winnerId] || 0) + pts;
+      }
+    }
+
+    this.winnerIds = [...winners];
+    this.started = false;
+    this.phase = 'roundEnd';
+    this.dosunAvailable = false;
+    this.awaitingPassFrom = [];
+    this.pendingResolve = null;
+    this.dosunClaimants = [];
+    this.lastWinType = 'dosun';
+    this.lastRoundDeltas = deltas;
+    this.resolveNextDealer(winners);
+
+    const names = winners.map((id) => this.players.find((p) => p.id === id).name).join('・');
+    this.addLog(`${names} が「ドスン！」(合計${target}) で上がりました！`);
   }
 
   endTurn(playerId) {
@@ -503,73 +605,49 @@ class Room {
     return { success: true };
   }
 
+  // Claims 当たり on the current discard. Doesn't resolve the round right
+  // away — other players might also be eligible on the same card, so this
+  // just records the claim and (like pass) waits for everyone being asked
+  // to respond before the round is actually settled.
   ron(playerId) {
-    if (!this.started || this.winnerId) return { error: '今はロンできません' };
-    if (!this.lastDiscardCard) return { error: '今はロンできません' };
-    if (playerId === this.lastDiscardPlayerId) return { error: '自分が出したカードにはロンできません' };
+    if (!this.started || this.winnerIds.length > 0) return { error: '今は当たりを宣言できません' };
+    if (!this.lastDiscardCard) return { error: '今は当たりを宣言できません' };
+    if (playerId === this.lastDiscardPlayerId) return { error: '自分が出したカードには当たりを宣言できません' };
+    if (!this.awaitingPassFrom.includes(playerId)) {
+      return { error: '今は当たりを宣言できません' };
+    }
     const player = this.players.find((p) => p.id === playerId);
     if (!player) return { error: 'プレイヤーが見つかりません' };
     if (player.furitenRanks.includes(this.lastDiscardCard.rank)) {
-      return { error: 'この数字は一度見送っているのでロンできません(自分の番が来るまでフリテン)' };
+      return { error: 'この数字は一度見送っているので当たりを宣言できません(自分の番が来るまでフリテン)' };
     }
     if (!canRon(player.hand, this.lastDiscardCard.rank)) {
       return { error: '手札の合計が一致していません' };
     }
-    const discarder = this.players.find((p) => p.id === this.lastDiscardPlayerId);
-    const target = this.lastDiscardCard.rank;
-    const pts = handScore(discarder.hand) * 2;
 
-    this.winnerId = player.id;
-    this.started = false;
-    this.phase = 'roundEnd';
-    this.dealerId = player.id;
-    this.lastDiscardCard = null;
-    this.lastDiscardPlayerId = null;
-    this.awaitingPassFrom = [];
-    this.pendingResolve = null;
-
-    discarder.score -= pts;
-    player.score += pts;
-    this.lastWinType = 'ron';
-    this.lastRoundDeltas = { [player.id]: pts, [discarder.id]: -pts };
-
-    this.addLog(`${player.name} が ロン！(合計${target}) ${discarder.name}から${pts}点`);
+    this.ronClaimants.push(playerId);
+    this.awaitingPassFrom = this.awaitingPassFrom.filter((id) => id !== playerId);
+    this.addLog(`${player.name} が「当たり！」と宣言しました`);
+    if (this.awaitingPassFrom.length === 0) this.resolvePassRound();
     return { success: true };
   }
 
+  // Claims ドスン on the opening card. Same collect-then-settle pattern as
+  // ron() above, so multiple simultaneous claims are all honored.
   dosun(playerId) {
-    if (!this.started || this.winnerId) return { error: '今はドスンできません' };
+    if (!this.started || this.winnerIds.length > 0) return { error: '今はドスンできません' };
     if (!this.dosunAvailable) return { error: '今はドスンできません' };
+    if (!this.awaitingPassFrom.includes(playerId)) return { error: '今はドスンできません' };
     const player = this.players.find((p) => p.id === playerId);
     if (!player) return { error: 'プレイヤーが見つかりません' };
     if (!canRon(player.hand, this.topCard.rank)) {
       return { error: '手札の合計が一致していません' };
     }
 
-    const target = this.topCard.rank;
-    const deltas = {};
-    let totalGain = 0;
-    for (const other of this.players) {
-      if (other.id === player.id) continue;
-      const pts = handScore(other.hand) * 2;
-      other.score -= pts;
-      deltas[other.id] = -pts;
-      totalGain += pts;
-    }
-    player.score += totalGain;
-    deltas[player.id] = totalGain;
-
-    this.winnerId = player.id;
-    this.started = false;
-    this.phase = 'roundEnd';
-    this.dealerId = player.id;
-    this.dosunAvailable = false;
-    this.awaitingPassFrom = [];
-    this.pendingResolve = null;
-    this.lastWinType = 'dosun';
-    this.lastRoundDeltas = deltas;
-
-    this.addLog(`${player.name} が「ドスン！」(合計${target}) で上がりました！(+${totalGain}点)`);
+    this.dosunClaimants.push(playerId);
+    this.awaitingPassFrom = this.awaitingPassFrom.filter((id) => id !== playerId);
+    this.addLog(`${player.name} が「ドスン！」と宣言しました`);
+    if (this.awaitingPassFrom.length === 0) this.resolvePassRound();
     return { success: true };
   }
 
@@ -595,7 +673,7 @@ class Room {
       code: this.code,
       hostId: this.hostId,
       started: this.started,
-      winnerId: this.winnerId,
+      winnerIds: this.winnerIds,
       direction: this.direction,
       currentSuit: this.currentSuit,
       currentPlayerId: this.players[this.currentPlayerIndex] ? this.players[this.currentPlayerIndex].id : null,
@@ -628,10 +706,11 @@ class Room {
       ),
       canRon: !!(
         this.started &&
-        !this.winnerId &&
+        this.winnerIds.length === 0 &&
         me &&
         this.lastDiscardCard &&
         this.lastDiscardPlayerId !== forPlayerId &&
+        this.awaitingPassFrom.includes(forPlayerId) &&
         !me.furitenRanks.includes(this.lastDiscardCard.rank) &&
         canRon(me.hand, this.lastDiscardCard.rank)
       ),
@@ -643,9 +722,10 @@ class Room {
       canRollDice: this.phase === 'dice' && this.diceRollPending.includes(forPlayerId),
       canDosun: !!(
         this.started &&
-        !this.winnerId &&
+        this.winnerIds.length === 0 &&
         this.dosunAvailable &&
         me &&
+        this.awaitingPassFrom.includes(forPlayerId) &&
         canRon(me.hand, this.topCard.rank)
       ),
       awaitingPassFrom: this.awaitingPassFrom,
