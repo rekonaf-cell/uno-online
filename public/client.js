@@ -99,10 +99,6 @@ document.getElementById('drawBtn').addEventListener('click', () => {
   socket.emit('drawCard');
 });
 
-document.getElementById('endTurnBtn').addEventListener('click', () => {
-  socket.emit('endTurn');
-});
-
 document.getElementById('pageOneBtn').addEventListener('click', () => {
   socket.emit('declarePageOne');
 });
@@ -449,7 +445,7 @@ function renderGame(state) {
   }
 
   hand.forEach((card, index) => {
-    const canPlay = isMyTurn && !state.pendingDraw && cardCanPlay(card, state.topCard, state.currentSuit, state.pendingChain);
+    const canPlay = isMyTurn && cardCanPlay(card, state.topCard, state.currentSuit, state.pendingChain);
     const isRaised = card.id === raisedCardId;
     const div = document.createElement('div');
     div.className =
@@ -466,7 +462,7 @@ function renderGame(state) {
         return;
       }
       if (waitingForOthers) return showToast('他のプレイヤーの確認待ちです');
-      if (!isMyTurn || state.pendingDraw) return showToast('今は出せません');
+      if (!isMyTurn) return showToast('今は出せません');
       if (!cardCanPlay(card, state.topCard, state.currentSuit, state.pendingChain)) return showToast('出せないカードです');
       raisedCardId = null;
       if (card.type === 'joker' || card.rank === 8) {
@@ -486,8 +482,7 @@ function renderGame(state) {
     handDiv.appendChild(div);
   });
 
-  document.getElementById('drawBtn').classList.toggle('hidden', !isMyTurn || state.pendingDraw);
-  document.getElementById('endTurnBtn').classList.toggle('hidden', !isMyTurn || !state.pendingDraw);
+  document.getElementById('drawBtn').classList.toggle('hidden', !isMyTurn);
   document.getElementById('pageOneBtn').classList.toggle('hidden', !state.canDeclarePageOne);
   document.getElementById('ronBtn').classList.toggle('hidden', !state.canRon);
   document.getElementById('dosunBtn').classList.toggle('hidden', !state.canDosun);

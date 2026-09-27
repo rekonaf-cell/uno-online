@@ -3,7 +3,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const { Room, canRon, discardRank } = require('./game');
-const { decideTurnAction, decideAfterDraw } = require('./bot');
+const { decideTurnAction } = require('./bot');
 
 const app = express();
 const server = http.createServer(app);
@@ -66,7 +66,7 @@ function findNextBotStep(room) {
     }
     const current = room.currentPlayer;
     if (current && current.isBot) {
-      return { type: room.pendingDraw ? 'afterDraw' : 'turn', playerId: current.id };
+      return { type: 'turn', playerId: current.id };
     }
   } else if (room.phase === 'dice') {
     const botId = room.diceRollPending.find((id) => room.players.find((p) => p.id === id)?.isBot);
@@ -81,8 +81,6 @@ function findNextBotStep(room) {
 function applyBotDecision(room, bot, decision) {
   if (decision.action === 'draw') {
     room.draw(bot.id);
-  } else if (decision.action === 'endTurn') {
-    room.endTurn(bot.id);
   } else if (decision.action === 'play') {
     room.playCard(bot.id, decision.cardId, decision.chosenSuit, decision.chosenRank);
     if (
@@ -123,9 +121,6 @@ function performBotStep(room, step) {
     }
     case 'turn':
       applyBotDecision(room, bot, decideTurnAction(room, bot));
-      break;
-    case 'afterDraw':
-      applyBotDecision(room, bot, decideAfterDraw(room, bot));
       break;
     default:
       break;
@@ -336,17 +331,6 @@ io.on('connection', (socket) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || !room.started) return;
     const result = room.draw(socket.id);
-    if (result.error) {
-      socket.emit('errorMsg', result.error);
-      return;
-    }
-    broadcastState(room);
-  });
-
-  socket.on('endTurn', () => {
-    const room = rooms.get(socket.data.roomCode);
-    if (!room || !room.started) return;
-    const result = room.endTurn(socket.id);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;

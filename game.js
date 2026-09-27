@@ -114,7 +114,6 @@ class Room {
     this.direction = 1;
     this.started = false;
     this.winnerIds = []; // usually one id, but simultaneous 当たり can produce several
-    this.pendingDraw = false; // player drew a free card this turn (no active chain) and hasn't acted yet
     this.pendingChain = null; // { rank: 2|3, amount: N }
     this.lastDiscardCard = null; // most recent discard, ron-able until superseded
     this.lastDiscardPlayerId = null;
@@ -199,7 +198,6 @@ class Room {
     this.started = true;
     this.phase = 'playing';
     this.winnerIds = [];
-    this.pendingDraw = false;
     this.pendingChain = null;
     this.lastDiscardCard = null;
     this.lastDiscardPlayerId = null;
@@ -412,7 +410,6 @@ class Room {
     player.hand.splice(cardIndex, 1);
     this.discardPile.push(discardedCard);
     this.discardHistory.push(discardedCard);
-    this.pendingDraw = false;
 
     if (player.hand.length === 0) {
       this.winnerIds = [player.id];
@@ -547,10 +544,11 @@ class Room {
       return { success: true };
     }
 
-    if (this.pendingDraw) return { error: 'すでに山札から引いています' };
+    // Drawing ends the turn outright — no playing the drawn card, even if
+    // it would have been legal. Matches the "draw and pass" house rule.
     this.drawCards(player, 1);
-    this.pendingDraw = true;
     this.addLog(`${player.name} が山札から1枚引きました`);
+    this.advanceTurn();
     return { success: true };
   }
 
@@ -713,15 +711,6 @@ class Room {
     this.addLog(`${names} が「ドスン！」(合計${target}) で上がりました！`);
   }
 
-  endTurn(playerId) {
-    const playerIndex = this.players.findIndex((p) => p.id === playerId);
-    if (playerIndex !== this.currentPlayerIndex) return { error: 'あなたの番ではありません' };
-    if (!this.pendingDraw) return { error: 'カードを引いてから終了してください' };
-    this.pendingDraw = false;
-    this.advanceTurn();
-    return { success: true };
-  }
-
   // Claims 当たり on the current discard. Doesn't resolve the round right
   // away — other players might also be eligible on the same card, so this
   // just records the claim and (like pass) waits for everyone being asked
@@ -794,7 +783,6 @@ class Room {
       direction: this.direction,
       currentSuit: this.currentSuit,
       currentPlayerId: this.players[this.currentPlayerIndex] ? this.players[this.currentPlayerIndex].id : null,
-      pendingDraw: this.pendingDraw,
       pendingChain: this.pendingChain,
       topCard: this.topCard || null,
       deckCount: this.deck.length,

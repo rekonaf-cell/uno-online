@@ -95,12 +95,4 @@ function decideTurnAction(room, bot) {
   return choosePlay(playable, bot);
 }
 
-// What should a bot do after a free draw (pendingDraw is true)?
-function decideAfterDraw(room, bot) {
-  const playable = bot.hand.filter((c) => cardMatches(c, room.topCard, room.currentSuit));
-  if (playable.length === 0) return { action: 'endTurn' };
-  const decision = choosePlay(playable, bot);
-  return decision.action === 'draw' ? { action: 'endTurn' } : decision;
-}
-
-module.exports = { decideTurnAction, decideAfterDraw };
+module.exports = { decideTurnAction };
