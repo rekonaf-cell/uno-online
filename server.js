@@ -115,9 +115,11 @@ function performBotStep(room, step) {
     case 'rollDice':
       room.rollDice(bot.id);
       break;
-    case 'chooseHandSize':
-      room.chooseHandSize(bot.id, 7);
+    case 'chooseHandSize': {
+      const size = 3 + Math.floor(Math.random() * 3); // 3〜5枚のランダム
+      room.chooseHandSize(bot.id, size);
       break;
+    }
     case 'turn':
       applyBotDecision(room, bot, decideTurnAction(room, bot));
       break;
