@@ -32,6 +32,11 @@ function cardLabel(card) {
   return `${suitSymbols[card.suit]}${rankLabel(card.rank)}`;
 }
 
+function historyCardLabel(card) {
+  if (card.type === 'joker') return 'JK';
+  return `${suitSymbols[card.suit]}${rankLabel(card.rank)}`;
+}
+
 function cardColorClass(card) {
   if (card.type === 'joker') return 'joker';
   return redSuits.includes(card.suit) ? 'red-suit' : 'black-suit';
@@ -135,6 +140,13 @@ socket.on('state', (state) => {
 });
 
 function render(state) {
+  // Always start from a clean slate: only the winnerId branch below turns
+  // this back on. Without this, the modal could stay stuck on screen when
+  // moving from "round just ended" into the dice/hand-size phase for the
+  // next round, since that transition clears winnerId but isn't the
+  // branch that explicitly hides it.
+  document.getElementById('winModal').classList.add('hidden');
+
   if (!state.started && !state.winnerId) {
     showScreen('waiting');
     renderWaiting(state);
@@ -168,7 +180,6 @@ function render(state) {
     document.getElementById('winModal').classList.remove('hidden');
     return;
   }
-  document.getElementById('winModal').classList.add('hidden');
   showScreen('game');
   renderGame(state);
 }
@@ -274,11 +285,13 @@ function renderGame(state) {
   const historyStrip = document.getElementById('historyStrip');
   historyStrip.innerHTML = '';
   const history = state.discardHistory || [];
+  let zIndex = history.length;
   for (let i = history.length - 1; i >= 0; i--) {
     const card = history[i];
     const div = document.createElement('div');
     div.className = 'history-card ' + cardColorClass(card);
-    div.textContent = cardLabel(card);
+    div.style.zIndex = zIndex--;
+    div.textContent = historyCardLabel(card);
     historyStrip.appendChild(div);
   }
 
