@@ -478,7 +478,10 @@ function cardCanPlay(card, topCard, currentSuit, pendingChain) {
   if (!topCard) return true;
   if (card.type === 'joker') return true;
   if (card.suit === currentSuit) return true;
-  if (topCard.type === 'normal' && card.rank === topCard.rank) return true;
+  // A played joker counts as its declared number too (e.g. a joker put
+  // down as "diamond 6" can be followed by any other 6).
+  const topRank = topCard.type === 'joker' ? topCard.chosenRank : topCard.rank;
+  if (topRank != null && card.rank === topRank) return true;
   return false;
 }
 
