@@ -448,6 +448,36 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .ronback-btn { background: #d21f1f; box-shadow: 0 0 10px rgba(210, 31, 31, 0.6); }
 .pass-btn { background: #444; }
 
+#revealedHands { margin-top: 8px; }
+.revealed-row { margin-bottom: 10px; }
+.revealed-label { font-size: 12px; color: var(--yellow); margin-bottom: 6px; }
+.revealed-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+}
+.mini-card {
+  width: 34px;
+  height: 48px;
+  border-radius: 5px;
+  background: #f5f0e6;
+  color: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 12px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+}
+.mini-card.red-suit { color: #d21f1f; }
+.mini-card.black-suit { color: #1a1a1a; }
+.mini-card.joker {
+  background: linear-gradient(135deg, var(--red), var(--yellow), var(--green), var(--blue));
+  color: white;
+  font-size: 8px;
+}
+
 #diceResultList,
 #roundResultList {
   list-style: none;

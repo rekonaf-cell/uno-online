@@ -134,7 +134,7 @@ class Room {
     this.awaitingPassFrom = []; // player ids who still must pass/当たり/dosun before the pending turn effect resolves
     this.pendingResolve = null; // closure that applies the deferred turn effect once everyone has passed
     this.ronClaimants = []; // player ids who claimed 当たり this pass round, collected until everyone has responded
-    this.dosunClaimants = []; // same, for the opening-card ドスン window
+    this.dosunClaimants = []; // same, for the opening-card ドン window
     this.awaitingRonBack = null; // discarder's id while they decide whether to counter a 当たり claimed against them
   }
 
@@ -231,7 +231,7 @@ class Room {
 
     this.addLog(`ゲーム開始！(${handSize}枚配り) 最初の場札は${describeCard(firstCard)}`);
 
-    // Give everyone a chance to hit the opening card with ドスン before the
+    // Give everyone a chance to hit the opening card with ドン before the
     // first turn's effect (skip/reverse/chain) actually takes hold.
     this.pendingResolve = () => {
       if (firstCard.rank === 11) {
@@ -582,7 +582,7 @@ class Room {
     return { success: true };
   }
 
-  // A player declines to claim 当たり on the current discard (or ドスン on
+  // A player declines to claim 当たり on the current discard (or ドン on
   // the opening card). Once everyone who was asked has responded — pass or
   // claim — the round is settled: by anyone who claimed, or otherwise the
   // deferred turn effect from the triggering play.
@@ -738,7 +738,7 @@ class Room {
     this.resolveNextDealer(winners);
 
     const names = winners.map((id) => this.players.find((p) => p.id === id).name).join('・');
-    this.addLog(`${names} が「ドスン！」(合計${target}) で上がりました！`);
+    this.addLog(`${names} が「ドン！」(合計${target}) で上がりました！`);
   }
 
   // Claims 当たり on the current discard. Doesn't resolve the round right
@@ -768,12 +768,12 @@ class Room {
     return { success: true };
   }
 
-  // Claims ドスン on the opening card. Same collect-then-settle pattern as
+  // Claims ドン on the opening card. Same collect-then-settle pattern as
   // ron() above, so multiple simultaneous claims are all honored.
   dosun(playerId) {
-    if (!this.started || this.winnerIds.length > 0) return { error: '今はドスンできません' };
-    if (!this.dosunAvailable) return { error: '今はドスンできません' };
-    if (!this.awaitingPassFrom.includes(playerId)) return { error: '今はドスンできません' };
+    if (!this.started || this.winnerIds.length > 0) return { error: '今はドンできません' };
+    if (!this.dosunAvailable) return { error: '今はドンできません' };
+    if (!this.awaitingPassFrom.includes(playerId)) return { error: '今はドンできません' };
     const player = this.players.find((p) => p.id === playerId);
     if (!player) return { error: 'プレイヤーが見つかりません' };
     if (!canRon(player.hand, this.topCard.rank)) {
@@ -782,7 +782,7 @@ class Room {
 
     this.dosunClaimants.push(playerId);
     this.awaitingPassFrom = this.awaitingPassFrom.filter((id) => id !== playerId);
-    this.addLog(`${player.name} が「ドスン！」と宣言しました`);
+    this.addLog(`${player.name} が「ドン！」と宣言しました`);
     if (this.awaitingPassFrom.length === 0) this.resolvePassRound();
     return { success: true };
   }
@@ -831,6 +831,15 @@ class Room {
       myHand: this.started && me ? me.hand : [],
       lastWinType: this.lastWinType,
       lastRoundDeltas: this.lastRoundDeltas,
+      // 当たり/ドンで勝った手は、勝負がついた以上は隠す理由がない。手札の
+      // 合計がどう的中したのか他のプレイヤーにも見えるように公開する。
+      revealedHands:
+        this.winnerIds.length > 0 &&
+        (this.lastWinType === 'ron' || this.lastWinType === 'dosun' || this.lastWinType === 'ronBack')
+          ? Object.fromEntries(
+              this.winnerIds.map((id) => [id, this.players.find((p) => p.id === id)?.hand || []])
+            )
+          : null,
       canDeclarePageOne: !!(
         me &&
         me.hand.length === 1 &&

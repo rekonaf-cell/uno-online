@@ -218,11 +218,35 @@ function render(state) {
     renderGame(state);
     const winners = winnerIds.map((id) => state.players.find((p) => p.id === id)).filter(Boolean);
     const winKindText =
-      state.lastWinType === 'ron' ? '（当たり！）' : state.lastWinType === 'dosun' ? '（ドスン！）' : '';
+      state.lastWinType === 'ron' ? '（当たり！）' : state.lastWinType === 'dosun' ? '（ドン！）' : '';
     const winnerNames = winners.map((w) => w.name).join('・');
     document.getElementById('winText').textContent = winnerNames
       ? `${winnerNames} の勝ち！🎉${winKindText}`
       : 'ゲーム終了';
+
+    const revealedDiv = document.getElementById('revealedHands');
+    revealedDiv.innerHTML = '';
+    if (state.revealedHands) {
+      for (const w of winners) {
+        const hand = state.revealedHands[w.id] || [];
+        const row = document.createElement('div');
+        row.className = 'revealed-row';
+        const label = document.createElement('div');
+        label.className = 'revealed-label';
+        label.textContent = `${w.name} の手札`;
+        row.appendChild(label);
+        const cardsDiv = document.createElement('div');
+        cardsDiv.className = 'revealed-cards';
+        for (const card of hand) {
+          const c = document.createElement('div');
+          c.className = 'mini-card ' + cardColorClass(card);
+          c.textContent = cardLabel(card);
+          cardsDiv.appendChild(c);
+        }
+        row.appendChild(cardsDiv);
+        revealedDiv.appendChild(row);
+      }
+    }
 
     const resultList = document.getElementById('roundResultList');
     resultList.innerHTML = '';
@@ -410,7 +434,7 @@ function renderGame(state) {
       .filter(Boolean)
       .map((p) => p.name)
       .join('・');
-    info = `${names} の確認待ち(通す/当たり/ドスン)`;
+    info = `${names} の確認待ち(通す/当たり/ドン)`;
   } else if (state.currentPlayerId === myId) {
     info = 'あなたの番です';
   } else {
