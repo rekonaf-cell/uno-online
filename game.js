@@ -139,6 +139,8 @@ class Room {
     this.ronClaimants = []; // player ids who claimed 当たり this pass round, collected until everyone has responded
     this.dosunClaimants = []; // same, for the opening-card ドン window
     this.awaitingRonBack = null; // discarder's id while they decide whether to counter a 当たり claimed against them
+    this.extraSkip = 0; // an owed extra advanceTurn() step (opening ace: the dealer still goes first, then this skips the next player once)
+    this.awaitingOpeningDeclare = false; // true while the dealer still needs to declare a suit/number for an opening joker/8
   }
 
   addPlayer(id, name, isBot = false) {
@@ -228,6 +230,8 @@ class Room {
     this.ronClaimants = [];
     this.dosunClaimants = [];
     this.awaitingRonBack = null;
+    this.extraSkip = 0;
+    this.awaitingOpeningDeclare = false;
 
     for (const player of this.players) {
       player.hand = this.deck.splice(0, handSize);
@@ -236,14 +240,27 @@ class Room {
       player.furitenRanks = [];
     }
 
-    let firstCard = this.deck.pop();
-    while (firstCard.type === 'joker' || firstCard.rank === 8) {
-      this.deck.unshift(firstCard);
-      shuffle(this.deck);
-      firstCard = this.deck.pop();
-    }
+    const firstCard = this.deck.pop();
     this.discardPile.push(firstCard);
     this.discardHistory.push(firstCard);
+
+    if (firstCard.type === 'joker' || firstCard.rank === 8) {
+      // Neither has a suit that counts on its own (8 works the same as when
+      // a player plays one; a joker has no printed suit at all), and a
+      // joker has no rank either — so 当たり/ドン can't even be judged yet.
+      // The dealer declares (suit, plus a number for a joker) before the
+      // ドン window opens, same as if they'd just played it themselves.
+      this.currentSuit = null;
+      this.dosunAvailable = false;
+      this.awaitingOpeningDeclare = true;
+      const dealerName = this.players.find((p) => p.id === this.dealerId)?.name || '';
+      const what = firstCard.type === 'joker' ? 'マークと数字' : 'マーク';
+      this.addLog(
+        `ゲーム開始！(${handSize}枚配り) 最初の場札は${describeCard(firstCard)}。${dealerName}が${what}を宣言してください`
+      );
+      return { success: true };
+    }
+
     this.currentSuit = firstCard.suit;
     this.dosunAvailable = true;
 
@@ -255,7 +272,9 @@ class Room {
       if (firstCard.rank === 11) {
         this.direction = -1;
       } else if (firstCard.rank === 1) {
-        this.advanceTurn();
+        // The dealer still takes their own real turn first — the skip
+        // lands on whoever comes after them, once that turn resolves.
+        this.extraSkip += 1;
       } else if (firstCard.rank === 2) {
         this.pendingChain = { rank: 2, amount: 2 };
       } else if (firstCard.rank === 3) {
@@ -268,6 +287,49 @@ class Room {
       this.pendingResolve = null;
       resolve();
     }
+    return { success: true };
+  }
+
+  // The dealer declares a suit (and, for a joker, a number) for an opening
+  // card that had none of its own — same information a normal play of that
+  // card would have supplied. Only after this does the ドン window open,
+  // since ドン needs a target rank to judge claims against.
+  declareOpeningCard(playerId, chosenSuit, chosenRank) {
+    if (!this.awaitingOpeningDeclare) return { error: '今は宣言できません' };
+    if (playerId !== this.dealerId) return { error: '親だけが宣言できます' };
+    if (!SUITS.includes(chosenSuit)) return { error: 'マークを選んでください' };
+
+    const firstCard = this.topCard;
+    let effectiveCard = firstCard;
+    if (firstCard.type === 'joker') {
+      const rankNum = Number(chosenRank);
+      if (!(Number.isInteger(rankNum) && rankNum >= 1 && rankNum <= 13)) {
+        return { error: '数字を選んでください' };
+      }
+      // A display/target-only copy — the real joker (rank stays null) is
+      // what goes back into the deck on the next reshuffle, so it must
+      // never carry a stale number from this declaration.
+      effectiveCard = { ...firstCard, chosenRank: rankNum, chosenSuit };
+      this.discardPile[this.discardPile.length - 1] = effectiveCard;
+      this.discardHistory[this.discardHistory.length - 1] = effectiveCard;
+    }
+
+    this.currentSuit = chosenSuit;
+    this.awaitingOpeningDeclare = false;
+    this.dosunAvailable = true;
+
+    const dealerName = this.players.find((p) => p.id === playerId)?.name || '';
+    const declaredText =
+      firstCard.type === 'joker' ? `${suitNames[chosenSuit]}の${rankLabel(effectiveCard.chosenRank)}` : suitNames[chosenSuit];
+    this.addLog(`${dealerName} が ${declaredText} を宣言しました`);
+
+    // Neither an 8 nor a joker has a skip/reverse/chain effect of its own
+    // (unlike 1/2/3/11) — there's nothing left to defer, just the ドン
+    // window before the dealer's own real turn begins.
+    this.pendingResolve = null;
+    this.awaitingPassFrom = this.players.filter((p) => p.connected).map((p) => p.id);
+    if (this.awaitingPassFrom.length === 0) this.resolvePassRound();
+    return { success: true };
   }
 
   // Kicks off the pre-round sequence: a dice-off to pick the very first
@@ -372,11 +434,16 @@ class Room {
   }
 
   advanceTurn(steps = 1) {
+    if (this.extraSkip) {
+      steps += this.extraSkip;
+      this.extraSkip = 0;
+    }
     const n = this.players.length;
     this.currentPlayerIndex = (((this.currentPlayerIndex + steps * this.direction) % n) + n) % n;
   }
 
   playCard(playerId, cardId, chosenSuit, chosenRank) {
+    if (this.awaitingOpeningDeclare) return { error: '親が最初のカードを宣言するまでお待ちください' };
     if (this.awaitingPassFrom.length > 0) return { error: '他のプレイヤーの確認待ちです' };
     const playerIndex = this.players.findIndex((p) => p.id === playerId);
     if (playerIndex !== this.currentPlayerIndex) return { error: 'あなたの番ではありません' };
@@ -589,6 +656,7 @@ class Room {
   }
 
   draw(playerId) {
+    if (this.awaitingOpeningDeclare) return { error: '親が最初のカードを宣言するまでお待ちください' };
     if (this.awaitingPassFrom.length > 0) return { error: '他のプレイヤーの確認待ちです' };
     const playerIndex = this.players.findIndex((p) => p.id === playerId);
     if (playerIndex !== this.currentPlayerIndex) return { error: 'あなたの番ではありません' };
@@ -753,7 +821,7 @@ class Room {
   }
 
   finalizeDosun() {
-    const target = this.topCard.rank;
+    const target = discardRank(this.topCard);
     const winners = this.dosunClaimants;
     const deltas = {};
     const breakdown = {};
@@ -823,7 +891,7 @@ class Room {
     if (!this.awaitingPassFrom.includes(playerId)) return { error: '今はドンできません' };
     const player = this.players.find((p) => p.id === playerId);
     if (!player) return { error: 'プレイヤーが見つかりません' };
-    if (!canRon(player.hand, this.topCard.rank)) {
+    if (!canRon(player.hand, discardRank(this.topCard))) {
       return { error: '手札の合計が一致していません' };
     }
 
@@ -860,6 +928,7 @@ class Room {
       currentPlayerId: this.players[this.currentPlayerIndex] ? this.players[this.currentPlayerIndex].id : null,
       pendingChain: this.pendingChain,
       topCard: this.topCard || null,
+      awaitingOpeningDeclare: this.awaitingOpeningDeclare,
       deckCount: this.deck.length,
       log: this.log,
       discardHistory: this.discardHistory,
@@ -920,7 +989,7 @@ class Room {
         this.dosunAvailable &&
         me &&
         this.awaitingPassFrom.includes(forPlayerId) &&
-        canRon(me.hand, this.topCard.rank)
+        canRon(me.hand, discardRank(this.topCard))
       ),
       awaitingPassFrom: this.awaitingPassFrom,
       canPass: this.awaitingPassFrom.includes(forPlayerId),

@@ -95,4 +95,11 @@ function decideTurnAction(room, bot) {
   return choosePlay(playable, bot);
 }
 
-module.exports = { decideTurnAction };
+// As dealer, declare a suit (and, for an opening joker, a number) for an
+// opening card that had none of its own — same choice a human dealer makes.
+function decideOpeningDeclare(room, bot) {
+  const chosenSuit = pickSuit(bot.hand, null);
+  return room.topCard.type === 'joker' ? { chosenSuit, chosenRank: pickRank() } : { chosenSuit };
+}
+
+module.exports = { decideTurnAction, decideOpeningDeclare };

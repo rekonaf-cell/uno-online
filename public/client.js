@@ -87,6 +87,7 @@ function showScreen(name) {
 let myId = null;
 let pendingSuitCardId = null;
 let pendingIsJoker = false;
+let pendingIsOpeningDeclare = false; // dealer declaring a suit(+number) for an opening joker/8, not playing a card
 let pendingChosenSuit = null;
 let pendingChosenRank = null;
 let raisedCardId = null; // fanned hand: card the player tapped to preview before playing
@@ -494,13 +495,23 @@ function resetPendingSuitModal() {
   rankChoicesDiv.querySelectorAll('.rank-btn').forEach((b) => b.classList.remove('selected'));
   pendingSuitCardId = null;
   pendingIsJoker = false;
+  pendingIsOpeningDeclare = false;
   pendingChosenSuit = null;
   pendingChosenRank = null;
 }
 
 function tryEmitPendingPlay() {
-  if (pendingSuitCardId === null || pendingChosenSuit === null) return;
+  if (pendingChosenSuit === null) return;
   if (pendingIsJoker && pendingChosenRank === null) return;
+  if (pendingIsOpeningDeclare) {
+    socket.emit('declareOpeningCard', {
+      chosenSuit: pendingChosenSuit,
+      chosenRank: pendingIsJoker ? pendingChosenRank : undefined,
+    });
+    resetPendingSuitModal();
+    return;
+  }
+  if (pendingSuitCardId === null) return;
   socket.emit('playCard', {
     cardId: pendingSuitCardId,
     chosenSuit: pendingChosenSuit,
@@ -717,6 +728,21 @@ function renderGame(state) {
   const me = state.players.find((p) => p.id === myId);
   const others = state.players.filter((p) => p.id !== myId);
 
+  // Opening card was a joker/8: the dealer needs to declare a suit (and,
+  // for a joker, a number) before ドン can even be judged. Auto-open the
+  // same suit/rank modal used for playing one, but wired to declare
+  // instead — guarded so it only opens once, not on every re-render while
+  // the dealer is still picking.
+  if (state.awaitingOpeningDeclare && state.dealerId === myId && !pendingIsOpeningDeclare) {
+    pendingIsOpeningDeclare = true;
+    pendingIsJoker = state.topCard && state.topCard.type === 'joker';
+    pendingSuitCardId = null;
+    pendingChosenSuit = null;
+    pendingChosenRank = null;
+    document.getElementById('suitModal').classList.remove('hidden');
+    document.getElementById('rankChooser').classList.toggle('hidden', !pendingIsJoker);
+  }
+
   // Seat opponents around the top arc of the round table (bottom stays
   // clear for "you"), so turn order reads as a physical seating order.
   const seatsDiv = document.getElementById('tableSeats');
@@ -784,11 +810,17 @@ function renderGame(state) {
   });
 
   const awaitingPassFrom = state.awaitingPassFrom || [];
-  const waitingForOthers = awaitingPassFrom.length > 0 || !!state.awaitingRonBack;
+  const waitingForOthers = awaitingPassFrom.length > 0 || !!state.awaitingRonBack || !!state.awaitingOpeningDeclare;
   const isMyTurn = state.currentPlayerId === myId && !waitingForOthers;
   const turnInfo = document.getElementById('turnInfo');
   let info = '';
-  if (state.awaitingRonBack) {
+  if (state.awaitingOpeningDeclare) {
+    const dealer = state.players.find((p) => p.id === state.dealerId);
+    info =
+      state.dealerId === myId
+        ? 'あなたが最初のカードを宣言してください'
+        : `${dealer ? dealer.name : ''} が最初のカードを宣言中…`;
+  } else if (state.awaitingRonBack) {
     const p = state.players.find((pl) => pl.id === state.awaitingRonBack);
     info =
       state.awaitingRonBack === myId
@@ -807,7 +839,9 @@ function renderGame(state) {
     const cp = state.players.find((p) => p.id === state.currentPlayerId);
     info = cp ? `${cp.name} の番です` : '';
   }
-  info += ` / 場のマーク: ${suitSymbols[state.currentSuit] || ''}${suitNames[state.currentSuit] || ''}`;
+  if (!state.awaitingOpeningDeclare) {
+    info += ` / 場のマーク: ${suitSymbols[state.currentSuit] || ''}${suitNames[state.currentSuit] || ''}`;
+  }
   if (state.pendingChain) {
     info += ` / ${state.pendingChain.rank}が連続中！ 引くと${state.pendingChain.amount}枚`;
   }

@@ -3,7 +3,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const { Room, canRon, discardRank } = require('./game');
-const { decideTurnAction } = require('./bot');
+const { decideTurnAction, decideOpeningDeclare } = require('./bot');
 
 const app = express();
 const server = http.createServer(app);
@@ -64,6 +64,11 @@ function broadcastState(room) {
 // is), then whatever the current turn/dice/hand-size step requires.
 function findNextBotStep(room) {
   if (room.phase === 'playing' && room.winnerIds.length === 0) {
+    if (room.awaitingOpeningDeclare) {
+      const dealer = room.players.find((p) => p.id === room.dealerId);
+      if (dealer && dealer.isBot) return { type: 'declareOpening', playerId: dealer.id };
+      return null; // waiting on a human dealer to declare
+    }
     if (room.awaitingRonBack) {
       const bot = room.players.find((p) => p.id === room.awaitingRonBack && p.isBot);
       if (bot) return { type: 'ronBack', playerId: bot.id };
@@ -71,7 +76,7 @@ function findNextBotStep(room) {
     }
     if (room.dosunAvailable && room.topCard) {
       const bot = room.players.find(
-        (p) => p.isBot && room.awaitingPassFrom.includes(p.id) && canRon(p.hand, room.topCard.rank)
+        (p) => p.isBot && room.awaitingPassFrom.includes(p.id) && canRon(p.hand, discardRank(room.topCard))
       );
       if (bot) return { type: 'dosun', playerId: bot.id };
     }
@@ -145,6 +150,11 @@ function performBotStep(room, step) {
     case 'chooseHandSize': {
       const size = 3 + Math.floor(Math.random() * 3); // 3〜5枚のランダム
       room.chooseHandSize(bot.id, size);
+      break;
+    }
+    case 'declareOpening': {
+      const { chosenSuit, chosenRank } = decideOpeningDeclare(room, bot);
+      room.declareOpeningCard(bot.id, chosenSuit, chosenRank);
       break;
     }
     case 'turn':
@@ -300,6 +310,17 @@ io.on('connection', (socket) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room) return;
     const result = room.chooseHandSize(socket.data.playerId, size);
+    if (result.error) {
+      socket.emit('errorMsg', result.error);
+      return;
+    }
+    broadcastState(room);
+  });
+
+  socket.on('declareOpeningCard', ({ chosenSuit, chosenRank }) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || !room.started) return;
+    const result = room.declareOpeningCard(socket.data.playerId, chosenSuit, chosenRank);
     if (result.error) {
       socket.emit('errorMsg', result.error);
       return;
