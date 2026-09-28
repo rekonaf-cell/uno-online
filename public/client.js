@@ -217,6 +217,25 @@ function flyCard(fromEl, toEl, faceLabel, colorClass) {
   setTimeout(() => ghost.remove(), 720);
 }
 
+function showSpeechBubble(playerId, text) {
+  const avatar = getSeatAvatarEl(playerId);
+  if (!avatar) return;
+  const rect = avatar.getBoundingClientRect();
+  const bubble = document.createElement('div');
+  bubble.className = 'speech-bubble';
+  bubble.textContent = text;
+  bubble.style.left = (rect.left + rect.width / 2) + 'px';
+  bubble.style.top = rect.top + 'px';
+  document.body.appendChild(bubble);
+  requestAnimationFrame(() => bubble.classList.add('show'));
+  // Timed to have finished fading out right as the (delayed) win modal
+  // opens, so it doesn't end up floating stale on top of it.
+  setTimeout(() => {
+    bubble.classList.remove('show');
+    setTimeout(() => bubble.remove(), 250);
+  }, 650);
+}
+
 let lastAnimatedActionSeq = null; // null = haven't seen a state yet, so the first one is a join/reload, not a new move
 function handleActionAnimation(state) {
   const action = state.lastAction;
@@ -257,6 +276,8 @@ function orderForScoring(hand) {
 
 let scoreAnimGeneration = 0;
 let lastScoreAnimSignature = null;
+let pendingWinSig = null; // a 当たり's win modal is delayed briefly so its speech bubble is seen first
+let revealedWinSig = null; // signature of the win the modal is currently (or was last) shown for
 
 function burstConfetti(stage, x, y) {
   const colors = ['#f2c12e', '#e6412e', '#3a9b4c', '#2a6fdb', '#c9a227'];
@@ -593,11 +614,8 @@ function render(state) {
     // triggered by something unrelated (a reconnect, a log update) while
     // the modal is still up must not restart it from scratch.
     const scoreSig = winnerIds.join(',') + '|' + state.lastWinType + '|' + JSON.stringify(state.lastRoundDeltas);
-    if (scoreSig !== lastScoreAnimSignature) {
-      lastScoreAnimSignature = scoreSig;
-      scoreAnimGeneration += 1;
-      playAllScoreAnims(state, scoreAnimGeneration);
-    }
+    const isNewWin = scoreSig !== lastScoreAnimSignature;
+    if (isNewWin) lastScoreAnimSignature = scoreSig;
 
     const revealedDiv = document.getElementById('revealedHands');
     revealedDiv.innerHTML = '';
@@ -639,7 +657,32 @@ function render(state) {
     const isHost = state.hostId === myId;
     document.getElementById('nextRoundBtn').classList.toggle('hidden', !isHost);
 
-    document.getElementById('winModal').classList.remove('hidden');
+    // 当たりでの勝利は、テーブル上の当てた本人のアイコンから「そいよ」の
+    // 吹き出しを一瞬だけ見せてから結果モーダルを開く。それ以外の勝ち方
+    // (通常上がり・ドン)は従来通り即座にモーダルを開く。
+    if (isNewWin && state.lastWinType === 'ron') {
+      pendingWinSig = scoreSig;
+      for (const w of winners) showSpeechBubble(w.id, 'そいよ');
+      setTimeout(() => {
+        if (pendingWinSig !== scoreSig) return; // 別の勝敗に上書きされた
+        revealedWinSig = scoreSig;
+        document.getElementById('winModal').classList.remove('hidden');
+        scoreAnimGeneration += 1;
+        playAllScoreAnims(state, scoreAnimGeneration);
+      }, 900);
+    } else if (isNewWin) {
+      pendingWinSig = scoreSig;
+      revealedWinSig = scoreSig;
+      document.getElementById('winModal').classList.remove('hidden');
+      scoreAnimGeneration += 1;
+      playAllScoreAnims(state, scoreAnimGeneration);
+    } else if (revealedWinSig === scoreSig) {
+      // すでに開き終えている同じ勝敗の再描画(再接続やログ更新など) —
+      // アニメーションはやり直さず、モーダルの表示だけ保つ
+      document.getElementById('winModal').classList.remove('hidden');
+    }
+    // else: 吹き出し演出の遅延待ち中(pendingWinSig === scoreSig) — 何もせず
+    // 非表示のままにして、上のsetTimeoutに開かせる
     return;
   }
   showScreen('game');
