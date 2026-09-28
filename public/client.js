@@ -741,6 +741,9 @@ function renderGame(state) {
     pendingChosenRank = null;
     document.getElementById('suitModal').classList.remove('hidden');
     document.getElementById('rankChooser').classList.toggle('hidden', !pendingIsJoker);
+    // Declaring the very first card of the game: there's no board to
+    // match against yet, so this one really is fully free.
+    document.getElementById('jokerMatchHint').classList.add('hidden');
   }
 
   // Seat opponents around the top arc of the round table (bottom stays
@@ -899,6 +902,9 @@ function renderGame(state) {
         pendingChosenRank = lockedRank;
         document.getElementById('suitModal').classList.remove('hidden');
         document.getElementById('rankChooser').classList.toggle('hidden', !pendingIsJoker || lockedRank !== null);
+        // A standalone joker play still has to match the board on suit or
+        // number — only the chain-answer case (locked above) is exempt.
+        document.getElementById('jokerMatchHint').classList.toggle('hidden', lockedRank !== null);
       } else {
         socket.emit('playCard', { cardId: card.id });
       }

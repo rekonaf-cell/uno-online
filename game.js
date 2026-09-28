@@ -486,6 +486,17 @@ class Room {
     if (card.type === 'joker' && this.pendingChain && rankNum !== this.pendingChain.rank) {
       return { error: `連続中は数字を${this.pendingChain.rank}にしてください` };
     }
+    // A joker can become any card, but it still has to be a card that
+    // could legally be played right now: matching the current suit, or
+    // matching the current number. Only the choice within that is free
+    // (e.g. any suit if the number matches, or any number if the suit
+    // matches) — it can't declare something unrelated to both.
+    if (card.type === 'joker') {
+      const topRank = discardRank(this.topCard);
+      if (chosenSuit !== this.currentSuit && rankNum !== topRank) {
+        return { error: '場のマークか数字のどちらかに合わせて宣言してください' };
+      }
+    }
 
     // A joker keeps its own identity (rank stays null) so it deals and
     // scores normally the next time it's shuffled back in; the discard

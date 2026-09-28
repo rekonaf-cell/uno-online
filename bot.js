@@ -1,4 +1,4 @@
-const { cardMatches, canFinishWith } = require('./game');
+const { cardMatches, canFinishWith, discardRank } = require('./game');
 
 // Rough point weight used only to decide which card a bot dumps first —
 // intentionally the same shape as handScore's per-card value, but a bot
@@ -44,7 +44,7 @@ function legalToPlay(bot, card) {
   return true;
 }
 
-function choosePlay(playable, bot) {
+function choosePlay(playable, bot, room) {
   const legal = playable.filter((c) => legalToPlay(bot, c));
   if (legal.length === 0) return { action: 'draw' };
 
@@ -57,11 +57,14 @@ function choosePlay(playable, bot) {
   const chosen = pool[0];
 
   if (chosen.type === 'joker') {
+    // The declared identity still has to match the board on suit or
+    // number. Matching the current number leaves the suit free to pick
+    // by hand majority as usual.
     return {
       action: 'play',
       cardId: chosen.id,
       chosenSuit: pickSuit(bot.hand, chosen.id),
-      chosenRank: pickRank(),
+      chosenRank: discardRank(room.topCard),
     };
   }
   if (chosen.rank === 8) {
@@ -92,7 +95,7 @@ function decideTurnAction(room, bot) {
 
   const playable = bot.hand.filter((c) => cardMatches(c, room.topCard, room.currentSuit));
   if (playable.length === 0) return { action: 'draw' };
-  return choosePlay(playable, bot);
+  return choosePlay(playable, bot, room);
 }
 
 // As dealer, declare a suit (and, for an opening joker, a number) for an
