@@ -233,7 +233,7 @@ function showSpeechBubble(playerId, text) {
   setTimeout(() => {
     bubble.classList.remove('show');
     setTimeout(() => bubble.remove(), 250);
-  }, 650);
+  }, 1750);
 }
 
 let lastAnimatedActionSeq = null; // null = haven't seen a state yet, so the first one is a join/reload, not a new move
@@ -669,7 +669,7 @@ function render(state) {
         document.getElementById('winModal').classList.remove('hidden');
         scoreAnimGeneration += 1;
         playAllScoreAnims(state, scoreAnimGeneration);
-      }, 900);
+      }, 2000);
     } else if (isNewWin) {
       pendingWinSig = scoreSig;
       revealedWinSig = scoreSig;
