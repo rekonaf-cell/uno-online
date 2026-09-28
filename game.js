@@ -545,6 +545,12 @@ class Room {
         this.currentSuit = chosenSuit;
         this.pendingChain = { rank: chainActive.rank, amount: chainActive.amount + chainActive.rank };
         this.advanceTurn();
+      } else if (card.type === 'joker' && (rankNum === 2 || rankNum === 3)) {
+        // A joker declared as a 2/3 acts as that card even when there's no
+        // chain to answer yet — it STARTS one, same as playing a real 2/3.
+        this.currentSuit = chosenSuit;
+        this.pendingChain = { rank: rankNum, amount: rankNum };
+        this.advanceTurn();
       } else if (card.type === 'joker' || card.rank === 8) {
         this.currentSuit = chosenSuit;
         this.pendingChain = null;
