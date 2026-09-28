@@ -505,16 +505,6 @@ class Room {
       // play, and only becomes a real win if nobody claims 当たり on it.
       this.addLog(`${player.name} が ${describeCard(discardedCard)} を出して上がろうとしています`);
 
-      if (this.lastDiscardCard) {
-        const oldRank = discardRank(this.lastDiscardCard);
-        for (const other of this.players) {
-          if (other.id === player.id || other.id === this.lastDiscardPlayerId) continue;
-          if (canRon(other.hand, oldRank) && !other.furitenRanks.includes(oldRank)) {
-            other.furitenRanks.push(oldRank);
-          }
-        }
-      }
-
       this.lastDiscardCard = discardedCard;
       this.lastDiscardPlayerId = player.id;
 
@@ -573,20 +563,6 @@ class Room {
     }
 
     this.addLog(`${player.name} が ${describeCard(discardedCard)} を出しました`);
-
-    // The previous discard is about to be superseded. Anyone who could have
-    // ronned on it but didn't is now furiten on that rank until their own
-    // turn comes around — except whoever discarded it themselves, since
-    // self-ron was never actually possible for them in the first place.
-    if (this.lastDiscardCard) {
-      const oldRank = discardRank(this.lastDiscardCard);
-      for (const other of this.players) {
-        if (other.id === player.id || other.id === this.lastDiscardPlayerId) continue;
-        if (canRon(other.hand, oldRank) && !other.furitenRanks.includes(oldRank)) {
-          other.furitenRanks.push(oldRank);
-        }
-      }
-    }
 
     // A joker's declared number now makes it ron-able just like any other
     // discard, using the value the player picked for it.
@@ -697,6 +673,25 @@ class Room {
   }
 
   resolvePassRound() {
+    // Nobody claims 当たり after this point for this discard — anyone who
+    // could have but didn't is now furiten on that rank until their own
+    // turn comes around. This has to happen right here, the moment the
+    // round for THIS discard actually concludes, not deferred until
+    // whenever the next card happens to be played: a player's own turn
+    // could fall in between and would wrongly find no furiten yet to
+    // clear, only for it to be slapped on afterward for a chance that, by
+    // rule, should already have been forgiven.
+    if (this.lastDiscardCard) {
+      const rank = discardRank(this.lastDiscardCard);
+      for (const other of this.players) {
+        if (other.id === this.lastDiscardPlayerId) continue;
+        if (this.ronClaimants.includes(other.id)) continue;
+        if (canRon(other.hand, rank) && !other.furitenRanks.includes(rank)) {
+          other.furitenRanks.push(rank);
+        }
+      }
+    }
+
     if (this.ronClaimants.length > 0) {
       // The discarder just got hit — if their own remaining hand also
       // matches the rank they discarded, give them a chance to turn the
