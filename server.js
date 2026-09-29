@@ -2,7 +2,7 @@ const path = require('path');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { Room, canRon, discardRank } = require('./game');
+const { Room, canRonPlayer, discardRank } = require('./game');
 const { decideTurnAction, decideOpeningDeclare } = require('./bot');
 
 const app = express();
@@ -76,7 +76,7 @@ function findNextBotStep(room) {
     }
     if (room.dosunAvailable && room.topCard) {
       const bot = room.players.find(
-        (p) => p.isBot && room.awaitingPassFrom.includes(p.id) && canRon(p.hand, discardRank(room.topCard))
+        (p) => p.isBot && room.awaitingPassFrom.includes(p.id) && canRonPlayer(p, discardRank(room.topCard))
       );
       if (bot) return { type: 'dosun', playerId: bot.id };
     }
@@ -88,7 +88,7 @@ function findNextBotStep(room) {
           room.awaitingPassFrom.includes(p.id) &&
           p.id !== room.lastDiscardPlayerId &&
           !p.furitenRanks.includes(target) &&
-          canRon(p.hand, target)
+          canRonPlayer(p, target)
       );
       if (bot) return { type: 'ron', playerId: bot.id };
     }
@@ -114,7 +114,7 @@ function findNextBotStep(room) {
 function applyBotDecision(room, bot, decision) {
   if (decision.action === 'draw') {
     room.draw(bot.id);
-    if (bot.hand.length === 1 && !bot.declaredPageOne && bot.hand[0].type !== 'joker') {
+    if (bot.hand.length === 1 && !bot.declaredPageOne && bot.hand[0].type !== 'joker' && bot.hand[0].rank !== 8) {
       room.declarePageOne(bot.id);
     }
   } else if (decision.action === 'play') {
@@ -122,7 +122,8 @@ function applyBotDecision(room, bot, decision) {
     if (
       bot.hand.length === 1 &&
       !bot.declaredPageOne &&
-      bot.hand[0].type !== 'joker'
+      bot.hand[0].type !== 'joker' &&
+      bot.hand[0].rank !== 8
     ) {
       room.declarePageOne(bot.id);
     }

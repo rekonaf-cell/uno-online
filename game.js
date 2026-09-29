@@ -57,6 +57,16 @@ function canRon(hand, target) {
   return remaining >= jokerCount * 1 && remaining <= jokerCount * 13;
 }
 
+// A player's actual right to ron: on top of the arithmetic, a lone last card
+// that is neither an 8 nor a joker only counts once page-one was declared.
+function canRonPlayer(player, target) {
+  if (player.hand.length === 1) {
+    const only = player.hand[0];
+    if (only.type !== 'joker' && only.rank !== 8 && !player.declaredPageOne) return false;
+  }
+  return canRon(player.hand, target);
+}
+
 // Point value of a single card for end-of-round scoring (NOT the same as
 // its rank used for turn order / ron matching). A, 3 and Joker are all
 // worth 10. J/Q/K keep 11/12/13. A "2" contributes no value on its own;
@@ -472,9 +482,9 @@ class Room {
         return { error: 'ページワンを宣言していないので今は上がれません。カードを引いてください' };
       }
     }
-    // A last-card 8 played WITHOUT declaring page-one doesn't win: it's just
-    // dumped, leaving a zero-card hand that has to draw again next turn.
-    const dumpingLastEight = willWin && card.rank === 8 && !player.declaredPageOne;
+    // A last-card 8 never wins on the player's own turn (declared or not): it's
+    // just dumped, leaving a zero-card hand that has to draw again next turn.
+    const dumpingLastEight = willWin && card.rank === 8;
 
     if ((card.type === 'joker' || card.rank === 8) && !SUITS.includes(chosenSuit)) {
       return { error: 'マークを選んでください' };
@@ -715,7 +725,7 @@ class Room {
       for (const other of this.players) {
         if (other.id === this.lastDiscardPlayerId) continue;
         if (this.ronClaimants.includes(other.id)) continue;
-        if (canRon(other.hand, rank) && !other.furitenRanks.includes(rank)) {
+        if (canRonPlayer(other, rank) && !other.furitenRanks.includes(rank)) {
           other.furitenRanks.push(rank);
         }
       }
@@ -726,7 +736,7 @@ class Room {
       // matches the rank they discarded, give them a chance to turn the
       // tables with 当たり返し before the claim is paid out normally.
       const discarder = this.players.find((p) => p.id === this.lastDiscardPlayerId);
-      if (discarder && canRon(discarder.hand, discardRank(this.lastDiscardCard))) {
+      if (discarder && canRonPlayer(discarder, discardRank(this.lastDiscardCard))) {
         this.awaitingRonBack = discarder.id;
         this.addLog(`${discarder.name} は当たり返しできます`);
         return;
@@ -896,7 +906,7 @@ class Room {
     if (player.furitenRanks.includes(discardRank(this.lastDiscardCard))) {
       return { error: 'この数字は一度見送っているので当たりを宣言できません(自分の番が来るまでフリテン)' };
     }
-    if (!canRon(player.hand, discardRank(this.lastDiscardCard))) {
+    if (!canRonPlayer(player, discardRank(this.lastDiscardCard))) {
       return { error: '手札の合計が一致していません' };
     }
 
@@ -915,7 +925,7 @@ class Room {
     if (!this.awaitingPassFrom.includes(playerId)) return { error: '今はドンできません' };
     const player = this.players.find((p) => p.id === playerId);
     if (!player) return { error: 'プレイヤーが見つかりません' };
-    if (!canRon(player.hand, discardRank(this.topCard))) {
+    if (!canRonPlayer(player, discardRank(this.topCard))) {
       return { error: '手札の合計が一致していません' };
     }
 
@@ -997,7 +1007,7 @@ class Room {
         this.lastDiscardPlayerId !== forPlayerId &&
         this.awaitingPassFrom.includes(forPlayerId) &&
         !me.furitenRanks.includes(discardRank(this.lastDiscardCard)) &&
-        canRon(me.hand, discardRank(this.lastDiscardCard))
+        canRonPlayer(me, discardRank(this.lastDiscardCard))
       ),
       canRonBack: this.awaitingRonBack === forPlayerId,
       awaitingRonBack: this.awaitingRonBack,
@@ -1013,7 +1023,7 @@ class Room {
         this.dosunAvailable &&
         me &&
         this.awaitingPassFrom.includes(forPlayerId) &&
-        canRon(me.hand, discardRank(this.topCard))
+        canRonPlayer(me, discardRank(this.topCard))
       ),
       awaitingPassFrom: this.awaitingPassFrom,
       canPass: this.awaitingPassFrom.includes(forPlayerId),
@@ -1021,4 +1031,4 @@ class Room {
   }
 }
 
-module.exports = { Room, SUITS, cardMatches, canFinishWith, canRon, handScore, discardRank };
+module.exports = { Room, SUITS, cardMatches, canFinishWith, canRon, canRonPlayer, handScore, discardRank };

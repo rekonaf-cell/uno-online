@@ -39,7 +39,7 @@ function pickSuit(hand, excludeCardId) {
 // needs a prior page-one declaration; only 8 is exempt).
 function legalToPlay(bot, card) {
   if (bot.hand.length !== 1) return true;
-  if (!canFinishWith(card)) return false;
+  if (!canFinishWith(card) || card.rank === 8) return false;
   if (!bot.declaredPageOne) return false;
   return true;
 }
