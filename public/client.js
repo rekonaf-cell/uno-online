@@ -437,6 +437,7 @@ function showToast(msg) {
 document.getElementById('createBtn').addEventListener('click', () => {
   const name = document.getElementById('nameInput').value.trim();
   if (!name) return showToast('ニックネームを入力してください');
+  pendingJoin = true;
   socket.emit('createRoom', { name, clientId: CLIENT_ID });
 });
 
@@ -445,6 +446,7 @@ document.getElementById('joinBtn').addEventListener('click', () => {
   const code = document.getElementById('codeInput').value.trim();
   if (!name) return showToast('ニックネームを入力してください');
   if (!code) return showToast('部屋コードを入力してください');
+  pendingJoin = true;
   socket.emit('joinRoom', { name, code, clientId: CLIENT_ID });
 });
 
@@ -459,6 +461,21 @@ document.getElementById('addBotBtn').addEventListener('click', () => {
 document.getElementById('nextRoundBtn').addEventListener('click', () => {
   socket.emit('startGame');
 });
+
+function leaveToLobby() {
+  if (!window.confirm('本当に部屋に戻りますか？\n（ゲームから抜けます）')) return;
+  socket.emit('leaveRoom');
+  clearSession();
+  document.getElementById('winModal').classList.add('hidden');
+  document.getElementById('suitModal').classList.add('hidden');
+  document.getElementById('leaveBtn').classList.add('hidden');
+  leftRoom = true;
+  showScreen('lobby');
+}
+let leftRoom = false;
+let pendingJoin = false;
+document.getElementById('leaveBtn').addEventListener('click', leaveToLobby);
+document.getElementById('leaveBtnWin').addEventListener('click', leaveToLobby);
 
 document.getElementById('drawPile').addEventListener('click', () => {
   socket.emit('drawCard');
@@ -589,6 +606,10 @@ socket.on('errorMsg', (msg) => showToast(msg));
 
 socket.on('state', (state) => {
   myId = CLIENT_ID;
+  if (leftRoom && !pendingJoin) return;
+  leftRoom = false;
+  pendingJoin = false;
+  document.getElementById('leaveBtn').classList.remove('hidden');
   if (state.code) saveSession(state.code);
   render(state);
 });

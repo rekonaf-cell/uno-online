@@ -420,7 +420,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('leaveRoom', () => {
+    const code = socket.data.roomCode;
     handleDisconnect(socket);
+    if (code) socket.leave(code);
+    if (socket.data.playerId) socket.leave(socket.data.playerId);
   });
 
   socket.on('disconnect', () => {

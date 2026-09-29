@@ -404,6 +404,20 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   border-radius: 14px;
   text-align: center;
   width: 280px;
+  max-height: 88vh;
+  max-height: 88dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.leave-btn {
+  position: fixed;
+  top: 6px;
+  left: 6px;
+  z-index: 5;
+  width: auto;
+  padding: 4px 10px;
+  font-size: 12px;
+  opacity: 0.85;
 }
 .suit-choices {
   display: flex;
