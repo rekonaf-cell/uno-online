@@ -154,6 +154,7 @@ class Room {
     this.dosunClaimants = []; // same, for the opening-card ドン window
     this.awaitingRonBack = null; // discarder's id while they decide whether to counter a 当たり claimed against them
     this.extraSkip = 0; // an owed extra advanceTurn() step (opening ace: the dealer still goes first, then this skips the next player once)
+    this.seatsShuffled = false;
     this.awaitingOpeningDeclare = false; // true while the dealer still needs to declare a suit/number for an opening joker/8
   }
 
@@ -364,6 +365,16 @@ class Room {
     this.lastWinType = null;
     this.lastRoundDeltas = null;
     this.lastScoreBreakdown = null;
+    if (!this.seatsShuffled && this.players.length >= 2) {
+      // Fisher-Yates: turn order (= array order, clockwise) is fixed once,
+      // before the very first dice-off, and every client renders from it.
+      for (let i = this.players.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [this.players[i], this.players[j]] = [this.players[j], this.players[i]];
+      }
+      this.seatsShuffled = true;
+      this.addLog('席順をランダムに決めました');
+    }
     if (this.dealerId === null) {
       let contenders;
       if (this.nextDealerCandidates && this.nextDealerCandidates.length > 0) {

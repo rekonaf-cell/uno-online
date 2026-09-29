@@ -809,7 +809,13 @@ function renderHandSizePhase(state) {
 
 function renderGame(state) {
   const me = state.players.find((p) => p.id === myId);
-  const others = state.players.filter((p) => p.id !== myId);
+  // Clockwise seating starting from whoever plays right after me, so every
+  // screen shows the same table ring, just rotated to put "me" at the bottom.
+  const myIdx = state.players.findIndex((p) => p.id === myId);
+  const others =
+    myIdx === -1
+      ? state.players.filter((p) => p.id !== myId)
+      : [...state.players.slice(myIdx + 1), ...state.players.slice(0, myIdx)];
 
   // Opening card was a joker/8: the dealer needs to declare a suit (and,
   // for a joker, a number) before ドン can even be judged. Auto-open the
