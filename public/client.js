@@ -807,7 +807,16 @@ function renderHandSizePhase(state) {
   document.getElementById('handSizeCustom').classList.add('hidden');
 }
 
+let lastGameState = null;
+// Tapping anywhere that isn't a hand card or a button puts a raised card back.
+document.addEventListener('click', (e) => {
+  if (raisedCardId === null || !lastGameState) return;
+  if (e.target.closest('#hand .card, button, .modal')) return;
+  raisedCardId = null;
+  renderGame(lastGameState);
+});
 function renderGame(state) {
+  lastGameState = state;
   const me = state.players.find((p) => p.id === myId);
   // Clockwise seating starting from whoever plays right after me, so every
   // screen shows the same table ring, just rotated to put "me" at the bottom.
