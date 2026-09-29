@@ -254,6 +254,65 @@ function showSpeechBubble(playerId, text) {
   }, 1750);
 }
 
+function tone(ctx, type, freqFrom, freqTo, start, dur, peak) {
+  const osc = ctx.createOscillator();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freqFrom, start);
+  if (freqTo !== freqFrom) osc.frequency.exponentialRampToValueAtTime(freqTo, start + dur);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, start);
+  g.gain.exponentialRampToValueAtTime(peak, start + Math.min(0.03, dur / 4));
+  g.gain.exponentialRampToValueAtTime(0.001, start + dur);
+  osc.connect(g).connect(ctx.destination);
+  osc.start(start);
+  osc.stop(start + dur + 0.02);
+}
+
+// ドン！の「フリーズ」演出: 暗転 → 静寂 → 光が走る → 金色の爆発。
+// 戻り値は演出の長さ(ms)。タップで飛ばせる。
+const DOSUN_FREEZE_MS = 4600;
+let dosunFreezeTimer = null;
+function playDosunFreeze(winnerNames, onDone) {
+  const old = document.getElementById('dosunFreeze');
+  if (old) old.remove();
+  clearTimeout(dosunFreezeTimer);
+  const ov = document.createElement('div');
+  ov.id = 'dosunFreeze';
+  ov.innerHTML =
+    '<div class="df-rays"></div><div class="df-crack"></div>' +
+    '<div class="df-text">ドン！！</div><div class="df-name"></div>';
+  ov.querySelector('.df-name').textContent = winnerNames;
+  document.body.appendChild(ov);
+
+  const ctx = ensureAudio();
+  if (ctx) {
+    const t = ctx.currentTime;
+    tone(ctx, 'sine', 110, 32, t + 0.05, 0.9, 0.7); // 暗転の重低音
+    noiseBurst(ctx, t + 0.05, 0.5, 'lowpass', 500, 60, 0.5);
+    tone(ctx, 'sawtooth', 40, 55, t + 1.2, 1.0, 0.12); // 静寂の中の唸り
+    const b = t + 2.2; // 発光
+    noiseBurst(ctx, b, 0.9, 'lowpass', 3000, 100, 0.7);
+    tone(ctx, 'sine', 90, 30, b, 1.1, 0.8);
+    [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => {
+      tone(ctx, 'triangle', f, f, b + 0.1 + i * 0.09, 0.9, 0.16);
+      tone(ctx, 'sine', f * 2, f * 2, b + 0.1 + i * 0.09, 0.6, 0.05);
+    });
+  }
+
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(dosunFreezeTimer);
+    ov.classList.add('out');
+    setTimeout(() => ov.remove(), 400);
+    onDone();
+  };
+  ov.addEventListener('click', finish);
+  requestAnimationFrame(() => ov.classList.add('go'));
+  dosunFreezeTimer = setTimeout(finish, DOSUN_FREEZE_MS);
+}
+
 let lastAnimatedActionSeq = null; // null = haven't seen a state yet, so the first one is a join/reload, not a new move
 function handleActionAnimation(state) {
   const action = state.lastAction;
@@ -710,6 +769,15 @@ function render(state) {
         scoreAnimGeneration += 1;
         playAllScoreAnims(state, scoreAnimGeneration);
       }, 2000);
+    } else if (isNewWin && state.lastWinType === 'dosun') {
+      pendingWinSig = scoreSig;
+      playDosunFreeze(winnerNames, () => {
+        if (pendingWinSig !== scoreSig) return;
+        revealedWinSig = scoreSig;
+        document.getElementById('winModal').classList.remove('hidden');
+        scoreAnimGeneration += 1;
+        playAllScoreAnims(state, scoreAnimGeneration);
+      });
     } else if (isNewWin) {
       pendingWinSig = scoreSig;
       revealedWinSig = scoreSig;
