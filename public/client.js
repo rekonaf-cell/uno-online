@@ -970,7 +970,7 @@ let lastGameState = null;
 // Tapping anywhere that isn't a hand card or a button puts a raised card back.
 document.addEventListener('click', (e) => {
   if (raisedCardId === null || !lastGameState) return;
-  if (e.target.closest('#hand .card, button, .modal')) return;
+  if (e.handledByCard || e.target.closest('button, .modal')) return;
   raisedCardId = null;
   renderGame(lastGameState);
 });
@@ -1136,7 +1136,8 @@ function renderGame(state) {
       'card ' + cardColorClass(card) + ' ' + (canPlay ? 'playable' : 'unplayable') + (isRaised ? ' raised' : '');
     if (index > 0) div.style.marginLeft = (step - HAND_CARD_WIDTH) + 'px';
     div.innerHTML = `<span class="corner">${historyCardLabel(card)}</span>${cardLabel(card)}`;
-    div.addEventListener('click', () => {
+    div.addEventListener('click', (e) => {
+      e.handledByCard = true; // the re-render below detaches this node, so the document-level "lower" handler can't tell it was a card tap
       if (!isRaised) {
         // First tap on a fanned card just brings it forward so it can be
         // seen clearly; this works any time, even outside your turn, so
