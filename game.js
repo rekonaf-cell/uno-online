@@ -809,6 +809,11 @@ class Room {
     let discarderLoss = 0;
     // The discarded card itself is back in play for scoring: the discarder
     // pays as if it were still in their hand, not as if it had already left.
+    // If that was their last card (a 2 played to go out), it would score 0,
+    // so the discarder draws 2 cards and pays on those plus the 2.
+    if (discarder.hand.length === 0 && this.lastDiscardCard.rank === 2) {
+      this.drawCards(discarder, 2);
+    }
     const discarderScoringHand = [...discarder.hand, this.lastDiscardCard];
     for (const winnerId of winners) {
       const winner = this.players.find((p) => p.id === winnerId);
