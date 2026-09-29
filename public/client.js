@@ -272,6 +272,92 @@ function tone(ctx, type, freqFrom, freqTo, start, dur, peak) {
 // 戻り値は演出の長さ(ms)。タップで飛ばせる。
 const DOSUN_FREEZE_MS = 4600;
 let dosunFreezeTimer = null;
+
+// もう一つの演出: 「プチュン」とブラウン管のように暗転し、勝者の手札を
+// 1枚ずつ開いていく。所要時間は手札の枚数で変わる。タップで飛ばせる。
+function playDosunPuchun(rows, onDone) {
+  const old = document.getElementById('dosunFreeze');
+  if (old) old.remove();
+  clearTimeout(dosunFreezeTimer);
+  const ov = document.createElement('div');
+  ov.id = 'dosunFreeze';
+  ov.className = 'puchun';
+  ov.innerHTML = '<div class="df-line"></div><div class="df-rows"></div><div class="df-text">ドン！！</div>';
+  const rowsDiv = ov.querySelector('.df-rows');
+  const cardEls = [];
+  for (const row of rows) {
+    const r = document.createElement('div');
+    r.className = 'df-row';
+    const label = document.createElement('div');
+    label.className = 'df-name2';
+    label.textContent = row.name;
+    r.appendChild(label);
+    const cs = document.createElement('div');
+    cs.className = 'df-cards';
+    for (const card of row.cards) {
+      const c = document.createElement('div');
+      c.className = 'mini-card df-card ' + cardColorClass(card);
+      c.textContent = cardLabel(card);
+      cs.appendChild(c);
+      cardEls.push(c);
+    }
+    r.appendChild(cs);
+    rowsDiv.appendChild(r);
+  }
+  document.body.appendChild(ov);
+
+  const START = 1300;
+  const STEP = 520;
+  const total = START + cardEls.length * STEP + 1500;
+  const ctx = ensureAudio();
+  if (ctx) {
+    const t = ctx.currentTime;
+    tone(ctx, 'sine', 1800, 60, t + 0.02, 0.28, 0.5); // プチュン
+    noiseBurst(ctx, t + 0.02, 0.08, 'highpass', 4000, 4000, 0.3);
+  }
+  const timers = [];
+  cardEls.forEach((el, i) => {
+    timers.push(
+      setTimeout(() => {
+        el.classList.add('open');
+        const c = ensureAudio();
+        if (c) {
+          const n = c.currentTime;
+          tone(c, 'triangle', 660 + i * 70, 660 + i * 70, n, 0.18, 0.18);
+          noiseBurst(c, n, 0.05, 'highpass', 2500, 2500, 0.15);
+        }
+      }, START + i * STEP)
+    );
+  });
+  timers.push(
+    setTimeout(() => {
+      ov.classList.add('finale');
+      const c = ensureAudio();
+      if (c) {
+        const n = c.currentTime;
+        tone(c, 'sine', 100, 35, n, 0.9, 0.7);
+        noiseBurst(c, n, 0.6, 'lowpass', 2500, 100, 0.6);
+        [784, 1047, 1319, 1568].forEach((f, i) => tone(c, 'triangle', f, f, n + 0.05 + i * 0.08, 0.8, 0.15));
+      }
+    }, START + cardEls.length * STEP + 300)
+  );
+
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    timers.forEach(clearTimeout);
+    clearTimeout(dosunFreezeTimer);
+    ov.classList.add('out');
+    setTimeout(() => ov.remove(), 400);
+    onDone();
+  };
+  ov.addEventListener('click', finish);
+  void ov.offsetWidth;
+  ov.classList.add('go');
+  dosunFreezeTimer = setTimeout(finish, total);
+}
+
 function playDosunFreeze(winnerNames, onDone) {
   const old = document.getElementById('dosunFreeze');
   if (old) old.remove();
@@ -309,7 +395,8 @@ function playDosunFreeze(winnerNames, onDone) {
     onDone();
   };
   ov.addEventListener('click', finish);
-  requestAnimationFrame(() => ov.classList.add('go'));
+  void ov.offsetWidth;
+  ov.classList.add('go');
   dosunFreezeTimer = setTimeout(finish, DOSUN_FREEZE_MS);
 }
 
@@ -771,13 +858,17 @@ function render(state) {
       }, 2000);
     } else if (isNewWin && state.lastWinType === 'dosun') {
       pendingWinSig = scoreSig;
-      playDosunFreeze(winnerNames, () => {
+      const revealRows = winners.map((w) => ({ name: w.name, cards: (state.revealedHands && state.revealedHands[w.id]) || [] }));
+      const showFreeze = Math.random() < 0.5 || revealRows.every((r) => r.cards.length === 0);
+      const afterCutscene = () => {
         if (pendingWinSig !== scoreSig) return;
         revealedWinSig = scoreSig;
         document.getElementById('winModal').classList.remove('hidden');
         scoreAnimGeneration += 1;
         playAllScoreAnims(state, scoreAnimGeneration);
-      });
+      };
+      if (showFreeze) playDosunFreeze(winnerNames, afterCutscene);
+      else playDosunPuchun(revealRows, afterCutscene);
     } else if (isNewWin) {
       pendingWinSig = scoreSig;
       revealedWinSig = scoreSig;
