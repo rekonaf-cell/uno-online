@@ -307,7 +307,7 @@ function playDosunPuchun(rows, onDone) {
   document.body.appendChild(ov);
 
   const START = 1300;
-  const STEP = 520;
+  const STEP = 800;
   const total = START + cardEls.length * STEP + 1500;
   const ctx = ensureAudio();
   if (ctx) {
@@ -319,18 +319,31 @@ function playDosunPuchun(rows, onDone) {
   cardEls.forEach((el, i) => {
     timers.push(
       setTimeout(() => {
+        ov.classList.remove('bump');
+        void ov.offsetWidth;
+        ov.classList.add('bump'); // 着地の衝撃
+        const c = ensureAudio();
+        if (c) {
+          const n = c.currentTime;
+          tone(c, 'sine', 140, 40, n, 0.35, 0.7);
+          noiseBurst(c, n, 0.15, 'lowpass', 1200, 100, 0.5);
+        }
+      }, START + i * STEP + 380)
+    );
+    timers.push(
+      setTimeout(() => {
         el.classList.add('open');
         const c = ensureAudio();
         if (c) {
           const n = c.currentTime;
-          tone(c, 'triangle', 660 + i * 70, 660 + i * 70, n, 0.18, 0.18);
-          noiseBurst(c, n, 0.05, 'highpass', 2500, 2500, 0.15);
+          tone(c, 'sine', 500, 900, n, 0.3, 0.12); // 落ちてくる風切り音
         }
       }, START + i * STEP)
     );
   });
   timers.push(
     setTimeout(() => {
+      ov.classList.remove('bump');
       ov.classList.add('finale');
       const c = ensureAudio();
       if (c) {
