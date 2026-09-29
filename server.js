@@ -114,13 +114,15 @@ function findNextBotStep(room) {
 function applyBotDecision(room, bot, decision) {
   if (decision.action === 'draw') {
     room.draw(bot.id);
+    if (bot.hand.length === 1 && !bot.declaredPageOne && bot.hand[0].type !== 'joker') {
+      room.declarePageOne(bot.id);
+    }
   } else if (decision.action === 'play') {
     room.playCard(bot.id, decision.cardId, decision.chosenSuit, decision.chosenRank);
     if (
       bot.hand.length === 1 &&
       !bot.declaredPageOne &&
-      bot.hand[0].type !== 'joker' &&
-      bot.hand[0].rank !== 8
+      bot.hand[0].type !== 'joker'
     ) {
       room.declarePageOne(bot.id);
     }

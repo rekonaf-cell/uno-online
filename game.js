@@ -472,6 +472,9 @@ class Room {
         return { error: 'ページワンを宣言していないので今は上がれません。カードを引いてください' };
       }
     }
+    // A last-card 8 played WITHOUT declaring page-one doesn't win: it's just
+    // dumped, leaving a zero-card hand that has to draw again next turn.
+    const dumpingLastEight = willWin && card.rank === 8 && !player.declaredPageOne;
 
     if ((card.type === 'joker' || card.rank === 8) && !SUITS.includes(chosenSuit)) {
       return { error: 'マークを選んでください' };
@@ -518,7 +521,7 @@ class Room {
     }
     this.recordAction('play', playerId, this.chainPlays);
 
-    if (player.hand.length === 0) {
+    if (player.hand.length === 0 && !dumpingLastEight) {
       // The winning card is ron-able just like any other discard — someone
       // else's hand might also total its rank. So this doesn't finalize
       // the win outright: it goes through the same pass round as a normal
@@ -674,6 +677,12 @@ class Room {
     // it would have been legal. Matches the "draw and pass" house rule.
     this.drawCards(player, 1);
     this.addLog(`${player.name} が山札から1枚引きました`);
+    if (player.hand.length === 1) {
+      // Came back from zero cards: like a fresh drop to one card, they may
+      // declare page-one until the next card is played.
+      player.declaredPageOne = false;
+      player.pageOneDeadline = this.discardHistory.length;
+    }
     this.recordAction('draw', playerId);
     this.advanceTurn();
     return { success: true };

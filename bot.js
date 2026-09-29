@@ -40,7 +40,7 @@ function pickSuit(hand, excludeCardId) {
 function legalToPlay(bot, card) {
   if (bot.hand.length !== 1) return true;
   if (!canFinishWith(card)) return false;
-  if (card.rank !== 8 && !bot.declaredPageOne) return false;
+  if (!bot.declaredPageOne) return false;
   return true;
 }
 
