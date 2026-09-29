@@ -631,6 +631,18 @@ class Room {
         this.currentSuit = chosenSuit;
         this.pendingChain = { rank: rankNum, amount: rankNum };
         this.advanceTurn();
+      } else if (card.type === 'joker' && rankNum === 1) {
+        // Declared as an A: skips the next player like a real A.
+        this.currentSuit = chosenSuit;
+        this.pendingChain = null;
+        this.advanceTurn(2);
+      } else if (card.type === 'joker' && rankNum === 11) {
+        // Declared as a J: reverses like a real J.
+        this.currentSuit = chosenSuit;
+        this.pendingChain = null;
+        this.direction *= -1;
+        if (this.players.length === 2) this.advanceTurn();
+        this.advanceTurn();
       } else if (card.type === 'joker' || card.rank === 8) {
         this.currentSuit = chosenSuit;
         this.pendingChain = null;
