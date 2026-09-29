@@ -679,7 +679,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 /* 当たり宣言時、プレイヤーアイコンから出す吹き出し。 */
 .speech-bubble {
   position: fixed;
-  transform: translate(-50%, calc(-100% - 10px)) scale(0.5);
+  transform: translate(-50%, -50%) scale(0.5);
   background: #fff;
   color: #222;
   font-weight: 800;
@@ -693,17 +693,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   opacity: 0;
   transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.3, 1.6, 0.4, 1);
 }
-.speech-bubble::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -7px;
-  transform: translateX(-50%);
-  border-width: 8px 7px 0 7px;
-  border-style: solid;
-  border-color: #fff transparent transparent transparent;
-}
 .speech-bubble.show {
   opacity: 1;
-  transform: translate(-50%, calc(-100% - 10px)) scale(1);
+  transform: translate(-50%, -50%) scale(1);
 }

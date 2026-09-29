@@ -224,8 +224,26 @@ function showSpeechBubble(playerId, text) {
   const bubble = document.createElement('div');
   bubble.className = 'speech-bubble';
   bubble.textContent = text;
-  bubble.style.left = (rect.left + rect.width / 2) + 'px';
-  bubble.style.top = rect.top + 'px';
+  // Place the bubble on the table side of the avatar (toward the table centre).
+  const tableEl = document.getElementById('historyStack');
+  const tr = tableEl ? tableEl.getBoundingClientRect() : null;
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  let dx = 0;
+  let dy = -1;
+  if (tr) {
+    dx = tr.left + tr.width / 2 - cx;
+    dy = tr.top + tr.height / 2 - cy;
+    const len = Math.hypot(dx, dy) || 1;
+    dx /= len;
+    dy /= len;
+  }
+  const dist = rect.width / 2 + 34;
+  const bx = Math.min(Math.max(cx + dx * dist, 70), window.innerWidth - 70);
+  const by = cy + dy * dist;
+  bubble.style.left = bx + 'px';
+  bubble.style.top = by + 'px';
+  bubble.style.transform = '';
   document.body.appendChild(bubble);
   requestAnimationFrame(() => bubble.classList.add('show'));
   // Timed to have finished fading out right as the (delayed) win modal
@@ -255,6 +273,7 @@ function handleActionAnimation(state) {
     flyCard(pile, avatar, null, null);
   } else if (action.type === 'play') {
     playCardSound();
+    if (action.chainCount >= 4) showSpeechBubble(action.playerId, '容赦せんよ！！');
     const card = state.topCard;
     flyCard(avatar, center, card ? cardLabel(card) : '', card ? cardColorClass(card) : '');
   }

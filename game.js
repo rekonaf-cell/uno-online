@@ -200,9 +200,9 @@ class Room {
     if (this.log.length > 30) this.log.shift();
   }
 
-  recordAction(type, playerId) {
+  recordAction(type, playerId, chainCount = 0) {
     this.actionSeq += 1;
-    this.lastAction = { type, playerId, seq: this.actionSeq };
+    this.lastAction = { type, playerId, seq: this.actionSeq, chainCount };
   }
 
   start(handSize = 7) {
@@ -507,7 +507,16 @@ class Room {
     player.hand.splice(cardIndex, 1);
     this.discardPile.push(discardedCard);
     this.discardHistory.push(discardedCard);
-    this.recordAction('play', playerId);
+    // How many 2/3s deep the running chain is with this play (0 = not a chain card).
+    const isChainCard = this.pendingChain
+      ? card.type === 'joker' || card.rank === this.pendingChain.rank
+      : card.type === 'joker' ? (rankNum === 2 || rankNum === 3) : (card.rank === 2 || card.rank === 3);
+    if (isChainCard) {
+      this.chainPlays = (this.pendingChain ? Math.max(this.chainPlays || 0, 1) : 0) + 1;
+    } else {
+      this.chainPlays = 0;
+    }
+    this.recordAction('play', playerId, this.chainPlays);
 
     if (player.hand.length === 0) {
       // The winning card is ron-able just like any other discard — someone
