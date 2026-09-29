@@ -337,10 +337,21 @@ class Room {
       firstCard.type === 'joker' ? `${suitNames[chosenSuit]}の${rankLabel(effectiveCard.chosenRank)}` : suitNames[chosenSuit];
     this.addLog(`${dealerName} が ${declaredText} を宣言しました`);
 
-    // Neither an 8 nor a joker has a skip/reverse/chain effect of its own
-    // (unlike 1/2/3/11) — there's nothing left to defer, just the ドン
-    // window before the dealer's own real turn begins.
-    this.pendingResolve = null;
+    // An 8 has no effect beyond the suit; a joker takes the effect of the
+    // number it was declared as (1/2/3/11), applied after the ドン window
+    // exactly like a normal opening card.
+    const openRank = firstCard.type === 'joker' ? effectiveCard.chosenRank : null;
+    this.pendingResolve = () => {
+      if (openRank === 11) {
+        this.direction = -1;
+      } else if (openRank === 1) {
+        this.extraSkip += 1;
+      } else if (openRank === 2) {
+        this.pendingChain = { rank: 2, amount: 2 };
+      } else if (openRank === 3) {
+        this.pendingChain = { rank: 3, amount: 3 };
+      }
+    };
     this.awaitingPassFrom = this.players.filter((p) => p.connected).map((p) => p.id);
     if (this.awaitingPassFrom.length === 0) this.resolvePassRound();
     return { success: true };
