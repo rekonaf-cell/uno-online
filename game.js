@@ -62,7 +62,11 @@ function canRon(hand, target) {
 function canRonPlayer(player, target) {
   if (player.hand.length === 1) {
     const only = player.hand[0];
-    if (only.type !== 'joker' && only.rank !== 8 && !player.declaredPageOne) return false;
+    const special = only.type === 'joker' || only.rank === 8;
+    // Declaring page-one on a joker/8 is a bluff: it's allowed as a tell,
+    // but it forfeits the right to ron with that card.
+    if (special && player.declaredPageOne) return false;
+    if (!special && !player.declaredPageOne) return false;
   }
   return canRon(player.hand, target);
 }
