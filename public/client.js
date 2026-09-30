@@ -92,9 +92,8 @@ let pendingChosenSuit = null;
 let pendingChosenRank = null;
 let raisedCardId = null; // fanned hand: card the player tapped to preview before playing
 
-const HAND_CARD_WIDTH = 68;
+const HAND_CARD_WIDTH = 84;
 const HAND_CARD_GAP = 6;
-const HAND_MIN_PEEK = 36; // narrowest sliver a covered card can be overlapped down to — kept large enough to tap reliably
 
 const suitSymbols = { spade: '♠', heart: '♥', diamond: '♦', club: '♣' };
 const suitNames = { spade: 'スペード', heart: 'ハート', diamond: 'ダイヤ', club: 'クラブ' };
@@ -814,7 +813,13 @@ function render(state) {
     // the modal is still up must not restart it from scratch.
     const scoreSig = winnerIds.join(',') + '|' + state.lastWinType + '|' + JSON.stringify(state.lastRoundDeltas);
     const isNewWin = scoreSig !== lastScoreAnimSignature;
-    if (isNewWin) lastScoreAnimSignature = scoreSig;
+    if (isNewWin) {
+      lastScoreAnimSignature = scoreSig;
+      document.getElementById('historyView').classList.add('hidden');
+      document.getElementById('historyBtn').textContent = '途中結果';
+    } else if (!document.getElementById('historyView').classList.contains('hidden')) {
+      renderScoreHistory(state);
+    }
 
     const revealedDiv = document.getElementById('revealedHands');
     revealedDiv.innerHTML = '';
@@ -980,6 +985,37 @@ function renderHandSizePhase(state) {
 }
 
 let lastGameState = null;
+
+function renderScoreHistory(state) {
+  const view = document.getElementById('historyView');
+  const hist = state.scoreHistory || [];
+  const players = state.players;
+  const typeLabel = { normal: '', ron: '当', ronBack: '返', dosun: 'ドン' };
+  let html = '<table class="hist-table"><thead><tr><th>回</th>';
+  for (const p of players) html += `<th>${escapeHtml(p.name)}</th>`;
+  html += '</tr></thead><tbody>';
+  for (const h of hist) {
+    const t = typeLabel[h.type] ? `<small>${typeLabel[h.type]}</small>` : '';
+    html += `<tr><td>${h.round}${t}</td>`;
+    for (const p of players) {
+      const d = h.deltas[p.id];
+      if (d === undefined) html += '<td class="zero">-</td>';
+      else html += `<td class="${d > 0 ? 'plus' : d < 0 ? 'minus' : 'zero'}">${d > 0 ? '+' : ''}${d}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody><tfoot><tr><td>現在</td>';
+  for (const p of players) html += `<td>${p.score}</td>`;
+  html += '</tr></tfoot></table>';
+  view.innerHTML = html;
+}
+document.getElementById('historyBtn').addEventListener('click', () => {
+  const view = document.getElementById('historyView');
+  const show = view.classList.contains('hidden');
+  if (show && lastGameState) renderScoreHistory(lastGameState);
+  view.classList.toggle('hidden', !show);
+  document.getElementById('historyBtn').textContent = show ? '途中結果を閉じる' : '途中結果';
+});
 // Tapping anywhere that isn't a hand card or a button puts a raised card back.
 document.addEventListener('click', (e) => {
   if (raisedCardId === null || !lastGameState) return;
@@ -1131,23 +1167,14 @@ function renderGame(state) {
   const hand = state.myHand || [];
   if (!hand.some((c) => c.id === raisedCardId)) raisedCardId = null;
 
-  // Fan the hand: cards overlap just enough to fit the visible width, so a
-  // large hand stays scannable instead of forcing a long horizontal scroll.
-  const containerWidth = handDiv.clientWidth || window.innerWidth - 32;
-  const idealStep = HAND_CARD_WIDTH + HAND_CARD_GAP;
-  const idealTotal = HAND_CARD_WIDTH + (hand.length - 1) * idealStep;
-  let step = idealStep;
-  if (hand.length > 1 && idealTotal > containerWidth) {
-    step = Math.max(HAND_MIN_PEEK, (containerWidth - HAND_CARD_WIDTH) / (hand.length - 1));
-  }
-
+  // Cards keep full size and never overlap; a big hand scrolls sideways.
   hand.forEach((card, index) => {
     const canPlay = isMyTurn && cardCanPlay(card, state.topCard, state.currentSuit, state.pendingChain);
     const isRaised = card.id === raisedCardId;
     const div = document.createElement('div');
     div.className =
       'card ' + cardColorClass(card) + ' ' + (canPlay ? 'playable' : 'unplayable') + (isRaised ? ' raised' : '');
-    if (index > 0) div.style.marginLeft = (step - HAND_CARD_WIDTH) + 'px';
+    if (index > 0) div.style.marginLeft = HAND_CARD_GAP + 'px';
     div.innerHTML = `<span class="corner">${historyCardLabel(card)}</span>${cardLabel(card)}`;
     div.addEventListener('click', (e) => {
       e.handledByCard = true; // the re-render below detaches this node, so the document-level "lower" handler can't tell it was a card tap

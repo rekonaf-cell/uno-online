@@ -155,6 +155,7 @@ class Room {
     this.awaitingRonBack = null; // discarder's id while they decide whether to counter a 当たり claimed against them
     this.extraSkip = 0; // an owed extra advanceTurn() step (opening ace: the dealer still goes first, then this skips the next player once)
     this.seatsShuffled = false;
+    this.scoreHistory = []; // one entry per finished round: { round, type, deltas, names, totals }
     this.awaitingOpeningDeclare = false; // true while the dealer still needs to declare a suit/number for an opening joker/8
   }
 
@@ -606,6 +607,7 @@ class Room {
         deltas[player.id] = totalGain;
         this.lastWinType = 'normal';
         this.lastRoundDeltas = deltas;
+        this.recordScoreHistory(deltas);
         this.lastScoreBreakdown = breakdown;
 
         this.addLog(`${player.name} が上がりました！(+${totalGain}点)`);
@@ -801,6 +803,16 @@ class Room {
     }
   }
 
+  recordScoreHistory(deltas) {
+    this.scoreHistory.push({
+      round: this.scoreHistory.length + 1,
+      type: this.lastWinType,
+      deltas: { ...deltas },
+      names: Object.fromEntries(this.players.map((p) => [p.id, p.name])),
+      totals: Object.fromEntries(this.players.map((p) => [p.id, p.score])),
+    });
+  }
+
   finalizeRon() {
     const discarder = this.players.find((p) => p.id === this.lastDiscardPlayerId);
     const target = discardRank(this.lastDiscardCard);
@@ -835,6 +847,7 @@ class Room {
     this.ronClaimants = [];
     this.lastWinType = 'ron';
     this.lastRoundDeltas = deltas;
+    this.recordScoreHistory(deltas);
     // Simultaneous winners each get paid separately off the same hand, so
     // the discarder's total loss is this calculation repeated once per
     // winner — the animation needs that payments count to land correctly.
@@ -880,6 +893,7 @@ class Room {
     this.awaitingRonBack = null;
     this.lastWinType = 'ronBack';
     this.lastRoundDeltas = deltas;
+    this.recordScoreHistory(deltas);
     this.lastScoreBreakdown = breakdown;
     this.resolveNextDealer([discarder.id]);
 
@@ -927,6 +941,7 @@ class Room {
     this.lastScoreBreakdown = breakdown;
     this.lastWinType = 'dosun';
     this.lastRoundDeltas = deltas;
+    this.recordScoreHistory(deltas);
     this.resolveNextDealer(winners);
 
     const names = winners.map((id) => this.players.find((p) => p.id === id).name).join('・');
@@ -1035,6 +1050,7 @@ class Room {
       // card-by-card count-up (including the 2-doubling step) client-side
       // instead of just showing the final number.
       scoreBreakdown: this.winnerIds.length > 0 ? this.lastScoreBreakdown : null,
+      scoreHistory: this.scoreHistory,
       lastAction: this.lastAction,
       canDeclarePageOne: !!(
         me &&
