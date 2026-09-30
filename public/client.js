@@ -1167,14 +1167,22 @@ function renderGame(state) {
   const hand = state.myHand || [];
   if (!hand.some((c) => c.id === raisedCardId)) raisedCardId = null;
 
-  // Cards keep full size and never overlap; a big hand scrolls sideways.
+  // Cards keep full size. They overlap only as much as needed to fit, but
+  // never more than half a card; past that the hand scrolls sideways.
+  const containerWidth = (handDiv.clientWidth || window.innerWidth) - 16;
+  const fullStep = HAND_CARD_WIDTH + HAND_CARD_GAP;
+  const minStep = HAND_CARD_WIDTH / 2;
+  let step = fullStep;
+  if (hand.length > 1 && HAND_CARD_WIDTH + (hand.length - 1) * fullStep > containerWidth) {
+    step = Math.max(minStep, (containerWidth - HAND_CARD_WIDTH) / (hand.length - 1));
+  }
   hand.forEach((card, index) => {
     const canPlay = isMyTurn && cardCanPlay(card, state.topCard, state.currentSuit, state.pendingChain);
     const isRaised = card.id === raisedCardId;
     const div = document.createElement('div');
     div.className =
       'card ' + cardColorClass(card) + ' ' + (canPlay ? 'playable' : 'unplayable') + (isRaised ? ' raised' : '');
-    if (index > 0) div.style.marginLeft = HAND_CARD_GAP + 'px';
+    if (index > 0) div.style.marginLeft = (step - HAND_CARD_WIDTH) + 'px';
     div.innerHTML = `<span class="corner">${historyCardLabel(card)}</span>${cardLabel(card)}`;
     div.addEventListener('click', (e) => {
       e.handledByCard = true; // the re-render below detaches this node, so the document-level "lower" handler can't tell it was a card tap
