@@ -414,10 +414,62 @@ function playDosunFreeze(winnerNames, onDone) {
 
 // ページワン宣言済みの最後の1枚で「上がる/引く」を決めたとき、ランダムで入る
 // 演出。伏せたカードがゆっくりめくれていき、上がり(出した)なら開き、
-// 引いたなら閉じる。操作(当たり等)を邪魔しないよう、タップは素通しにする。
+// 引いたなら閉じる。開いた場合は、他の人が通す/当たりを判定し終わるまで
+// 開いたカードの画面のままにする。出したカードはめくれるまで見えない。
+const PEEL_REVEAL_MS = 3300;
+const peel = { active: false, willOpen: false, revealed: false, queue: [], timers: [], el: null };
+
+function peelBlocking() {
+  return peel.active && peel.willOpen && !peel.revealed;
+}
+
+function whenPeelRevealed(fn) {
+  if (!peel.active || peel.revealed) fn();
+  else peel.queue.push(fn);
+}
+
+function endPeel() {
+  peel.timers.forEach(clearTimeout);
+  peel.timers = [];
+  peel.queue = [];
+  peel.active = false;
+  peel.revealed = false;
+  document.body.classList.remove('peeling');
+  if (peel.el) {
+    const el = peel.el;
+    peel.el = null;
+    el.classList.add('peel-out');
+    setTimeout(() => el.remove(), 350);
+  }
+  if (lastGameState) renderGame(lastGameState);
+}
+
+function showPeelBurst(text) {
+  if (!peel.el) return;
+  const pts = [];
+  const n = 18;
+  for (let i = 0; i < n * 2; i++) {
+    const r = i % 2 === 0 ? 50 : 30;
+    const ang = (Math.PI * i) / n - Math.PI / 2;
+    pts.push(`${(50 + r * Math.cos(ang)).toFixed(1)}% ${(50 + r * Math.sin(ang)).toFixed(1)}%`);
+  }
+  const burst = document.createElement('div');
+  burst.className = 'peel-burst';
+  burst.style.clipPath = `polygon(${pts.join(',')})`;
+  burst.innerHTML = `<span>${text}</span>`;
+  peel.el.appendChild(burst);
+  const ctx = ensureAudio();
+  if (ctx) {
+    const t = ctx.currentTime;
+    noiseBurst(ctx, t, 0.3, 'highpass', 2500, 2500, 0.4);
+    tone(ctx, 'sine', 160, 45, t, 0.4, 0.7);
+    tone(ctx, 'square', 880, 880, t + 0.02, 0.18, 0.08);
+  }
+}
+
 function playPeelSuspense(willOpen, card) {
-  const old = document.getElementById('peelSuspense');
-  if (old) old.remove();
+  if (peel.el) peel.el.remove();
+  peel.timers.forEach(clearTimeout);
   const ov = document.createElement('div');
   ov.id = 'peelSuspense';
   const face = card ? cardLabel(card) : '';
@@ -428,6 +480,12 @@ function playPeelSuspense(willOpen, card) {
   document.body.appendChild(ov);
   void ov.offsetWidth;
   ov.classList.add(willOpen ? 'peel-open' : 'peel-close');
+  peel.el = ov;
+  peel.active = true;
+  peel.willOpen = willOpen;
+  peel.revealed = false;
+  peel.queue = [];
+  if (willOpen) document.body.classList.add('peeling');
 
   const ctx = ensureAudio();
   if (ctx) {
@@ -444,7 +502,21 @@ function playPeelSuspense(willOpen, card) {
       noiseBurst(ctx, b, 0.12, 'lowpass', 600, 100, 0.4);
     }
   }
-  setTimeout(() => ov.remove(), 4300);
+
+  if (willOpen) {
+    peel.timers.push(
+      setTimeout(() => {
+        peel.revealed = true;
+        const q = peel.queue;
+        peel.queue = [];
+        q.forEach((fn) => fn());
+        if (lastGameState) renderGame(lastGameState); // 通す/当たりボタンをここで出す
+      }, PEEL_REVEAL_MS)
+    );
+    peel.timers.push(setTimeout(() => endPeel(), 90000)); // 万一終わらなかった時の保険
+  } else {
+    peel.timers.push(setTimeout(() => endPeel(), 4300));
+  }
 }
 
 let lastAnimatedActionSeq = null; // null = haven't seen a state yet, so the first one is a join/reload, not a new move
@@ -466,10 +538,13 @@ function handleActionAnimation(state) {
     flyCard(pile, avatar, null, null);
   } else if (action.type === 'play') {
     playCardSound();
-    if (action.chainCount >= 4) showSpeechBubble(action.playerId, '容赦せんよ！！');
+    if (action.chainCount >= 4 && !action.suspense) showSpeechBubble(action.playerId, '容赦せんよ！！');
     const card = state.topCard;
-    flyCard(avatar, center, card ? cardLabel(card) : '', card ? cardColorClass(card) : '');
-    if (action.suspense) playPeelSuspense(true, card);
+    if (action.suspense) {
+      playPeelSuspense(true, card); // 出したカードはめくれるまで見せない
+    } else {
+      flyCard(avatar, center, card ? cardLabel(card) : '', card ? cardColorClass(card) : '');
+    }
   }
   if (action.type === 'draw' && action.suspense) playPeelSuspense(false, null);
 }
@@ -901,7 +976,27 @@ function render(state) {
     // 当たりでの勝利は、テーブル上の当てた本人のアイコンから「そいよ」の
     // 吹き出しを一瞬だけ見せてから結果モーダルを開く。それ以外の勝ち方
     // (通常上がり・ドン)は従来通り即座にモーダルを開く。
-    if (isNewWin && state.lastWinType === 'ron') {
+    if (isNewWin && peel.active && peel.willOpen) {
+      // めくれたカードの画面のまま判定 → 当たりなら大きなギザギザ吹き出し
+      pendingWinSig = scoreSig;
+      whenPeelRevealed(() => {
+        if (pendingWinSig !== scoreSig) return;
+        const open = () => {
+          if (pendingWinSig !== scoreSig) return;
+          endPeel();
+          revealedWinSig = scoreSig;
+          document.getElementById('winModal').classList.remove('hidden');
+          scoreAnimGeneration += 1;
+          playAllScoreAnims(state, scoreAnimGeneration);
+        };
+        if (state.lastWinType === 'ron') {
+          showPeelBurst('そいよ！');
+          peel.timers.push(setTimeout(open, 2200));
+        } else {
+          peel.timers.push(setTimeout(open, 700));
+        }
+      });
+    } else if (isNewWin && state.lastWinType === 'ron') {
       pendingWinSig = scoreSig;
       for (const w of winners) showSpeechBubble(w.id, 'そいよ');
       setTimeout(() => {
@@ -1257,11 +1352,11 @@ function renderGame(state) {
 
   document.getElementById('drawBtn').classList.toggle('hidden', !isMyTurn);
   document.getElementById('pageOneBtn').classList.toggle('hidden', !state.canDeclarePageOne);
-  document.getElementById('ronBtn').classList.toggle('hidden', !state.canRon);
-  document.getElementById('dosunBtn').classList.toggle('hidden', !state.canDosun);
+  document.getElementById('ronBtn').classList.toggle('hidden', !state.canRon || peelBlocking());
+  document.getElementById('dosunBtn').classList.toggle('hidden', !state.canDosun || peelBlocking());
   document.getElementById('ronBackBtn').classList.toggle('hidden', !state.canRonBack);
   document.getElementById('declineRonBackBtn').classList.toggle('hidden', !state.canRonBack);
-  document.getElementById('passBtn').classList.toggle('hidden', !state.canPass);
+  document.getElementById('passBtn').classList.toggle('hidden', !state.canPass || peelBlocking());
 
   const logBox = document.getElementById('logBox');
   logBox.innerHTML = state.log.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
