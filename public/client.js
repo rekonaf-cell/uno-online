@@ -412,6 +412,41 @@ function playDosunFreeze(winnerNames, onDone) {
   dosunFreezeTimer = setTimeout(finish, DOSUN_FREEZE_MS);
 }
 
+// ページワン宣言済みの最後の1枚で「上がる/引く」を決めたとき、ランダムで入る
+// 演出。伏せたカードがゆっくりめくれていき、上がり(出した)なら開き、
+// 引いたなら閉じる。操作(当たり等)を邪魔しないよう、タップは素通しにする。
+function playPeelSuspense(willOpen, card) {
+  const old = document.getElementById('peelSuspense');
+  if (old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'peelSuspense';
+  const face = card ? cardLabel(card) : '';
+  const color = card ? cardColorClass(card) : '';
+  ov.innerHTML =
+    '<div class="peel-card"><div class="peel-back"></div>' +
+    `<div class="peel-front card ${color}">${face}</div></div>`;
+  document.body.appendChild(ov);
+  void ov.offsetWidth;
+  ov.classList.add(willOpen ? 'peel-open' : 'peel-close');
+
+  const ctx = ensureAudio();
+  if (ctx) {
+    const t = ctx.currentTime;
+    tone(ctx, 'sawtooth', 70, 150, t, 2.2, 0.06); // じわじわ高まる緊張音
+    tone(ctx, 'sine', 55, 55, t, 2.2, 0.15);
+    if (willOpen) {
+      const b = t + 2.5;
+      [784, 988, 1175, 1568].forEach((f, i) => tone(ctx, 'triangle', f, f, b + i * 0.07, 0.7, 0.14));
+      noiseBurst(ctx, b, 0.25, 'highpass', 3000, 3000, 0.25);
+    } else {
+      const b = t + 2.45;
+      tone(ctx, 'sine', 180, 40, b, 0.4, 0.5);
+      noiseBurst(ctx, b, 0.12, 'lowpass', 600, 100, 0.4);
+    }
+  }
+  setTimeout(() => ov.remove(), 4300);
+}
+
 let lastAnimatedActionSeq = null; // null = haven't seen a state yet, so the first one is a join/reload, not a new move
 function handleActionAnimation(state) {
   const action = state.lastAction;
@@ -434,7 +469,9 @@ function handleActionAnimation(state) {
     if (action.chainCount >= 4) showSpeechBubble(action.playerId, '容赦せんよ！！');
     const card = state.topCard;
     flyCard(avatar, center, card ? cardLabel(card) : '', card ? cardColorClass(card) : '');
+    if (action.suspense) playPeelSuspense(true, card);
   }
+  if (action.type === 'draw' && action.suspense) playPeelSuspense(false, null);
 }
 
 // Mirrors game.js's cardPointValue()/handScore(): A/3/joker=10, J/Q/K keep

@@ -216,9 +216,9 @@ class Room {
     if (this.log.length > 30) this.log.shift();
   }
 
-  recordAction(type, playerId, chainCount = 0) {
+  recordAction(type, playerId, chainCount = 0, suspense = false) {
     this.actionSeq += 1;
-    this.lastAction = { type, playerId, seq: this.actionSeq, chainCount };
+    this.lastAction = { type, playerId, seq: this.actionSeq, chainCount, suspense };
   }
 
   start(handSize = 7) {
@@ -485,6 +485,10 @@ class Room {
     const playerIndex = this.players.findIndex((p) => p.id === playerId);
     if (playerIndex !== this.currentPlayerIndex) return { error: 'あなたの番ではありません' };
     const player = this.players[playerIndex];
+    // Declared page-one with a single card left: going out or drawing is
+    // a tense moment, and sometimes (random, decided here so every client
+    // agrees) it gets the slow card-peel cutscene.
+    const suspense = player.hand.length === 1 && player.declaredPageOne && Math.random() < 0.4;
     player.furitenRanks = []; // their own turn has arrived: any furiten lock clears
     this.dosunAvailable = false; // window for hitting the opening card is over
 
@@ -556,7 +560,7 @@ class Room {
     } else {
       this.chainPlays = 0;
     }
-    this.recordAction('play', playerId, this.chainPlays);
+    this.recordAction('play', playerId, this.chainPlays, suspense);
 
     if (player.hand.length === 0 && !dumpingLastEight) {
       // The winning card is ron-able just like any other discard — someone
@@ -710,6 +714,7 @@ class Room {
     const playerIndex = this.players.findIndex((p) => p.id === playerId);
     if (playerIndex !== this.currentPlayerIndex) return { error: 'あなたの番ではありません' };
     const player = this.players[playerIndex];
+    const suspense = player.hand.length === 1 && player.declaredPageOne && Math.random() < 0.4;
     player.furitenRanks = []; // their own turn has arrived: any furiten lock clears
     this.dosunAvailable = false; // window for hitting the opening card is over
 
@@ -718,7 +723,7 @@ class Room {
       this.drawCards(player, amount);
       this.addLog(`${player.name} が ${amount}枚引きました`);
       this.pendingChain = null;
-      this.recordAction('draw', playerId);
+      this.recordAction('draw', playerId, 0, suspense);
       this.advanceTurn();
       return { success: true };
     }
@@ -733,7 +738,7 @@ class Room {
       player.declaredPageOne = false;
       player.pageOneDeadline = this.discardHistory.length;
     }
-    this.recordAction('draw', playerId);
+    this.recordAction('draw', playerId, 0, suspense);
     this.advanceTurn();
     return { success: true };
   }
