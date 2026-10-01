@@ -197,6 +197,7 @@ function getSeatAvatarEl(playerId) {
 
 function flyCard(fromEl, toEl, faceLabel, colorClass) {
   if (!fromEl || !toEl) return;
+  if (window.Table3D && Table3D.fly(fromEl, toEl, faceLabel, colorClass)) return;
   const fromRect = fromEl.getBoundingClientRect();
   const toRect = toEl.getBoundingClientRect();
   const ghost = document.createElement('div');
@@ -1123,6 +1124,10 @@ function renderHandSizePhase(state) {
 }
 
 let lastGameState = null;
+// three.js は defer で遅れて読み込まれるので、先に状態が届いていたら読み込み後にもう一度描く
+window.addEventListener('load', () => {
+  if (window.Table3D && lastGameState && !Table3D.isOn()) renderGame(lastGameState);
+});
 
 document.getElementById('helpBtn').addEventListener('click', () => {
   document.getElementById('helpModal').classList.remove('hidden');
@@ -1392,6 +1397,11 @@ function renderGame(state) {
   const logBox = document.getElementById('logBox');
   logBox.innerHTML = state.log.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
   logBox.scrollTop = logBox.scrollHeight;
+
+  if (window.Table3D) {
+    Table3D.init();
+    Table3D.sync();
+  }
 }
 
 function cardCanPlay(card, topCard, currentSuit, pendingChain) {
