@@ -1124,6 +1124,16 @@ function renderHandSizePhase(state) {
 
 let lastGameState = null;
 
+document.getElementById('helpBtn').addEventListener('click', () => {
+  document.getElementById('helpModal').classList.remove('hidden');
+});
+document.getElementById('helpCloseBtn').addEventListener('click', () => {
+  document.getElementById('helpModal').classList.add('hidden');
+});
+document.getElementById('helpModal').addEventListener('click', (e) => {
+  if (e.target.id === 'helpModal') e.currentTarget.classList.add('hidden');
+});
+
 // 引く演出の最中は、まだ次の人に番が移ったことや手札が増えたことを
 // 見せない(上がりでないことが先にバレてしまうため)。
 function applyPeelMask(state) {

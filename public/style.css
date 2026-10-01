@@ -853,3 +853,18 @@ body.peeling #historyStack, body.peeling #logBox, body.peeling #turnInfo { visib
   -webkit-text-stroke: 3px #fff; paint-order: stroke fill; text-shadow: 3px 3px 0 rgba(0,0,0,0.35);
 }
 @keyframes burstPop { 0% { transform: scale(0.1) rotate(-30deg); opacity: 0; } 100% { transform: scale(1) rotate(0); opacity: 1; } }
+
+/* 遊び方 */
+.help-btn {
+  position: fixed; top: 6px; right: 6px; z-index: 5; width: auto; margin: 0;
+  padding: 4px 10px; font-size: 12px; border-radius: 14px; opacity: 0.85;
+  background: var(--panel); border: 1px solid #555;
+}
+#helpModal { z-index: 70; }
+.help-content { width: min(340px, 92vw); max-height: 86vh; overflow-y: auto; text-align: left; }
+.help-content h3 { margin: 0 0 10px; text-align: center; }
+.help-content details { border-top: 1px solid #444; padding: 6px 0; }
+.help-content summary { cursor: pointer; font-weight: 700; padding: 6px 0; color: var(--yellow); }
+.help-content ul { margin: 4px 0 6px; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+.help-content li { margin-bottom: 4px; }
+.help-content button { margin-top: 10px; }
