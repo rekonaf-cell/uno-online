@@ -869,8 +869,13 @@ body.peeling #historyStack, body.peeling #logBox, body.peeling #turnInfo { visib
 .help-content li { margin-bottom: 4px; }
 .help-content button { margin-top: 10px; }
 
-/* 3Dテーブル層(three.js)。使えない/重い端末では .has3d が付かず、従来のHTMLテーブルのまま。 */
+/* 3Dテーブル層(three.js・斜め視点)。使えない/重い端末では .has3d が付かず、従来のHTMLテーブルのまま。 */
 #table3d { position: absolute; z-index: 0; pointer-events: none; }
-.has3d #roundTable { background: none; border-color: transparent; box-shadow: none; }
+.has3d #roundTable { aspect-ratio: auto; background: none; border: none; box-shadow: none; border-radius: 0; }
+.has3d #selfSeat { bottom: auto; transform: translate(-50%, -50%); }
+.has3d #historyStack { width: 56px; height: 80px; }
 .has3d .hist-card { visibility: hidden; }
-.has3d .deck-pile { background: none; border-color: transparent; box-shadow: none; text-shadow: 0 1px 2px #000; }
+.has3d .deck-pile { width: 42px; height: 58px; background: none; border-color: transparent; box-shadow: none; text-shadow: 0 1px 3px #000; }
+.has3d #roundTable { margin-bottom: 40px; }
+.has3d #dirBadge { top: 40%; left: 66%; transform: translate(-50%, -50%); }
+.has3d #dirBadge.reverse { transform: translate(-50%, -50%) scaleX(-1); }

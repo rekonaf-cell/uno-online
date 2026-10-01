@@ -1124,6 +1124,9 @@ function renderHandSizePhase(state) {
 }
 
 let lastGameState = null;
+window.__rerender = () => {
+  if (lastGameState) renderGame(lastGameState);
+};
 // three.js は defer で遅れて読み込まれるので、先に状態が届いていたら読み込み後にもう一度描く
 window.addEventListener('load', () => {
   if (window.Table3D && lastGameState && !Table3D.isOn()) renderGame(lastGameState);
@@ -1222,6 +1225,7 @@ function renderGame(state) {
 
   // Seat opponents around the top arc of the round table (bottom stays
   // clear for "you"), so turn order reads as a physical seating order.
+  if (window.Table3D) Table3D.init(); // 席の位置を3D座標から決めるので、先に用意する
   const seatsDiv = document.getElementById('tableSeats');
   seatsDiv.innerHTML = '';
   const seatArc = 290;
@@ -1238,8 +1242,15 @@ function renderGame(state) {
       (p.id === state.currentPlayerId ? ' active' : '') +
       (!p.connected ? ' disconnected' : '') +
       (p.declaredPageOne ? ' page-one' : '');
-    div.style.left = leftPct + '%';
-    div.style.top = topPct + '%';
+    const pt = window.Table3D ? Table3D.seatPoint(angle) : null;
+    if (pt) {
+      div.style.left = pt.x + 'px';
+      div.style.top = pt.y + 'px';
+      div.style.transform = `translate(-50%, -50%) scale(${pt.scale.toFixed(3)})`;
+    } else {
+      div.style.left = leftPct + '%';
+      div.style.top = topPct + '%';
+    }
     div.dataset.playerId = p.id;
     const botTag = p.isBot ? ' 🤖' : '👤';
     const dealerTag = p.id === state.dealerId ? '<div class="dealer-tag">親</div>' : '';
