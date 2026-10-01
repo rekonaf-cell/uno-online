@@ -566,7 +566,7 @@ function handleActionAnimation(state) {
     if (action.chainCount >= 4 && !action.suspense) showSpeechBubble(action.playerId, '容赦せんよ！！');
     const card = state.topCard;
     if (action.suspense) {
-      playPeelSuspense(true, card); // 出したカードはめくれるまで見せない
+      playPeelSuspense(true, card, action.playerId); // 出したカードはめくれるまで見せない
     } else {
       flyCard(avatar, center, card ? cardLabel(card) : '', card ? cardColorClass(card) : '');
     }
@@ -1174,15 +1174,21 @@ document.getElementById('helpModal').addEventListener('click', (e) => {
 // 引く演出の最中は、まだ次の人に番が移ったことや手札が増えたことを
 // 見せない(上がりでないことが先にバレてしまうため)。
 function applyPeelMask(state) {
-  if (!peel.active || peel.willOpen || !peel.actorId) return state;
-  return {
-    ...state,
-    currentPlayerId: peel.actorId,
-    deckCount: (state.deckCount || 0) + 1,
-    players: state.players.map((p) =>
-      p.id === peel.actorId && p.id !== myId ? { ...p, cardCount: Math.max(p.cardCount - 1, 0) } : p
-    ),
-  };
+  if (!peel.active || !peel.actorId) return state;
+  if (peel.willOpen && peel.revealed) return state; // 開いた後は隠す理由がない
+  const players = state.players.map((p) => {
+    if (p.id !== peel.actorId) return p;
+    // 宣言済みの表示は、引いた後や上がった後も演出が終わるまで残す。枚数も演出前のまま
+    const count =
+      p.id === myId ? p.cardCount : peel.willOpen ? p.cardCount + 1 : Math.max(p.cardCount - 1, 0);
+    return { ...p, declaredPageOne: true, cardCount: count };
+  });
+  const masked = { ...state, players };
+  if (!peel.willOpen) {
+    masked.currentPlayerId = peel.actorId;
+    masked.deckCount = (state.deckCount || 0) + 1;
+  }
+  return masked;
 }
 
 function renderScoreHistory(state) {
