@@ -879,3 +879,41 @@ body.peeling #historyStack, body.peeling #logBox, body.peeling #turnInfo { visib
 .has3d #roundTable { margin-bottom: 40px; }
 .has3d #dirBadge { top: 40%; left: 66%; transform: translate(-50%, -50%); }
 .has3d #dirBadge.reverse { transform: translate(-50%, -50%) scaleX(-1); }
+
+/* 場のマーク(大) */
+.suit-badge {
+  position: absolute; z-index: 1; left: 50%; top: 74%; transform: translate(-50%, -50%);
+  width: 46px; height: 46px; border-radius: 50%; background: #f5f0e6; border: 3px solid #c9a227;
+  display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 800;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5); pointer-events: none;
+}
+.suit-badge.red-suit { color: #d21f1f; }
+.suit-badge.black-suit { color: #1a1a1a; }
+.suit-badge.hidden { display: none; }
+.has3d .suit-badge { left: 76%; top: 62%; }
+body.peeling #suitBadge { visibility: hidden; }
+
+/* 自分の番: 画面の縁が金色に光る */
+body.my-turn::after {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 4;
+  box-shadow: inset 0 0 26px 4px rgba(242, 193, 46, 0.55);
+  animation: myTurnGlow 1.8s ease-in-out infinite;
+}
+@keyframes myTurnGlow { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+/* 残り1〜2枚の相手: 枚数バッジが赤く点滅 */
+.count-badge.low { background: #e6412e; color: #fff; animation: lowPulse 0.9s ease-in-out infinite; }
+@keyframes lowPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.22); } }
+
+/* ログ: 直近3行は大きく、最新は特に目立たせる。カードは色付きのマーク+数字 */
+#logBox { height: 96px; }
+#logBox .recent { color: #c9ccd6; font-size: 13px; }
+#logBox .latest { color: #fff; font-size: 14px; font-weight: 700; }
+.lg-card { display: inline-block; padding: 0 4px; border-radius: 4px; background: #f5f0e6; font-weight: 800; margin: 0 1px; }
+.lg-red { color: #d21f1f; }
+.lg-blk { color: #1a1a1a; }
+
+/* 操作ボタン: 大きく、位置を固定して押し間違えにくく */
+#actions { min-height: 66px; gap: 14px; align-items: center; flex-wrap: wrap; }
+#actions button { flex: 1 1 0; min-width: 120px; max-width: 220px; min-height: 56px; padding: 14px 10px; font-size: 20px; margin: 4px 0; }
+#hand { touch-action: pan-x; }

@@ -72,6 +72,7 @@ async function requestWakeLock() {
   }
 }
 document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') document.title = baseTitle;
   if (document.visibilityState === 'visible' && !wakeLock && !screens.game.classList.contains('hidden')) {
     requestWakeLock();
   }
@@ -90,6 +91,7 @@ let pendingIsJoker = false;
 let pendingIsOpeningDeclare = false; // dealer declaring a suit(+number) for an opening joker/8, not playing a card
 let pendingChosenSuit = null;
 let pendingChosenRank = null;
+let suppressCardClickUntil = 0;
 let raisedCardId = null; // fanned hand: card the player tapped to preview before playing
 
 const HAND_CARD_WIDTH = 84;
@@ -134,7 +136,23 @@ function sleep(ms) {
 
 // --- 効果音(WebAudioで合成。音声ファイルを持たずに済む) ---
 let audioCtx = null;
+let soundMuted = false;
+try {
+  soundMuted = localStorage.getItem('pageOneMute') === '1';
+} catch (e) {}
+function setSoundMuted(m) {
+  soundMuted = m;
+  try {
+    localStorage.setItem('pageOneMute', m ? '1' : '0');
+  } catch (e) {}
+}
+function buzz(pattern) {
+  try {
+    if (!soundMuted && navigator.vibrate) navigator.vibrate(pattern);
+  } catch (e) {}
+}
 function ensureAudio() {
+  if (soundMuted) return null;
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -691,6 +709,7 @@ async function playScoreBreakdown(container, payerName, breakdown, gen) {
 }
 
 async function playAllScoreAnims(state, gen) {
+  playResultSound(state);
   const container = document.getElementById('scoreAnims');
   container.innerHTML = '';
   if (!state.scoreBreakdown) return;
@@ -1132,6 +1151,16 @@ window.addEventListener('load', () => {
   if (window.Table3D && lastGameState && !Table3D.isOn()) renderGame(lastGameState);
 });
 
+const soundToggleBtn = document.getElementById('soundToggleBtn');
+function refreshSoundToggle() {
+  soundToggleBtn.textContent = soundMuted ? '効果音・振動: オフ' : '効果音・振動: オン';
+}
+refreshSoundToggle();
+soundToggleBtn.addEventListener('click', () => {
+  setSoundMuted(!soundMuted);
+  refreshSoundToggle();
+  if (!soundMuted) playTurnSound();
+});
 document.getElementById('helpBtn').addEventListener('click', () => {
   document.getElementById('helpModal').classList.remove('hidden');
 });
@@ -1256,7 +1285,7 @@ function renderGame(state) {
     const dealerTag = p.id === state.dealerId ? '<div class="dealer-tag">親</div>' : '';
     const tag = p.declaredPageOne ? '<div class="page-one-badge">📢</div>' : '';
     div.innerHTML =
-      `<div class="seat-avatar">${botTag}${dealerTag}<div class="count-badge">${p.cardCount}</div></div>` +
+      `<div class="seat-avatar">${botTag}${dealerTag}<div class="count-badge${p.cardCount > 0 && p.cardCount <= 2 ? ' low' : ''}">${p.cardCount}</div></div>` +
       `<div class="sname">${escapeHtml(p.name)}</div>` +
       `<div class="sinfo">${p.score}点</div>${tag}`;
     seatsDiv.appendChild(div);
@@ -1301,6 +1330,37 @@ function renderGame(state) {
   const waitingForOthers = awaitingPassFrom.length > 0 || !!state.awaitingRonBack || !!state.awaitingOpeningDeclare;
   const isMyTurn = state.currentPlayerId === myId && !waitingForOthers;
   const turnInfo = document.getElementById('turnInfo');
+  const inRound = state.started && (state.winnerIds || []).length === 0;
+  if (isMyTurn && !wasMyTurn && inRound) {
+    playTurnSound();
+    buzz([70, 40, 70]);
+    if (document.hidden) document.title = '【あなたの番】' + baseTitle;
+  }
+  wasMyTurn = !!(isMyTurn && inRound);
+  document.body.classList.toggle('my-turn', wasMyTurn);
+
+  // ページワン宣言の合図(自分以外の宣言にも鳴らす)
+  const declaredNow = new Set(state.players.filter((p) => p.declaredPageOne).map((p) => p.id));
+  if (prevDeclared) {
+    for (const id of declaredNow) {
+      if (!prevDeclared.has(id)) {
+        playPageOneSound();
+        if (id === myId) buzz(60);
+      }
+    }
+  }
+  prevDeclared = declaredNow;
+
+  // 場のマークを大きく表示(出したカードを隠す演出中は CSS で隠れる)
+  const suitBadge = document.getElementById('suitBadge');
+  if (suitBadge) {
+    const show = state.started && !state.awaitingOpeningDeclare && !!state.currentSuit && (state.winnerIds || []).length === 0;
+    suitBadge.classList.toggle('hidden', !show);
+    if (show) {
+      suitBadge.textContent = suitSymbols[state.currentSuit] || '';
+      suitBadge.className = 'suit-badge ' + (['heart', 'diamond'].includes(state.currentSuit) ? 'red-suit' : 'black-suit');
+    }
+  }
   let info = '';
   if (state.awaitingOpeningDeclare) {
     const dealer = state.players.find((p) => p.id === state.dealerId);
@@ -1363,19 +1423,14 @@ function renderGame(state) {
       'card ' + cardColorClass(card) + ' ' + (canPlay ? 'playable' : 'unplayable') + (isRaised ? ' raised' : '');
     if (index > 0) div.style.marginLeft = (step - HAND_CARD_WIDTH) + 'px';
     div.innerHTML = `<span class="corner">${historyCardLabel(card)}</span>${cardLabel(card)}`;
-    div.addEventListener('click', (e) => {
-      e.handledByCard = true; // the re-render below detaches this node, so the document-level "lower" handler can't tell it was a card tap
-      if (!isRaised) {
-        // First tap on a fanned card just brings it forward so it can be
-        // seen clearly; this works any time, even outside your turn, so
-        // the hand stays browsable. Only the second tap attempts to play it.
-        raisedCardId = card.id;
-        renderGame(state);
-        return;
-      }
+    const attemptPlay = () => {
       if (waitingForOthers) return showToast('他のプレイヤーの確認待ちです');
-      if (!isMyTurn) return showToast('今は出せません');
-      if (!cardCanPlay(card, state.topCard, state.currentSuit, state.pendingChain)) return showToast('出せないカードです');
+      if (!isMyTurn) return showToast(explainNotMyTurn(state));
+      if (!cardCanPlay(card, state.topCard, state.currentSuit, state.pendingChain)) {
+        return showToast(explainUnplayable(card, state));
+      }
+      const why = explainLastCard(card, state, me);
+      if (why) return showToast(why);
       raisedCardId = null;
       if (card.type === 'joker' || card.rank === 8) {
         pendingSuitCardId = card.id;
@@ -1393,6 +1448,38 @@ function renderGame(state) {
       } else {
         socket.emit('playCard', { cardId: card.id });
       }
+    };
+    // 上へスワイプでも出せる(横スクロールとは区別するため、縦に大きく動いたときだけ)
+    let swipe = null;
+    div.addEventListener('pointerdown', (e) => {
+      swipe = { x: e.clientX, y: e.clientY };
+    });
+    div.addEventListener('pointerup', (e) => {
+      if (!swipe) return;
+      const dx = e.clientX - swipe.x;
+      const dy = e.clientY - swipe.y;
+      swipe = null;
+      if (dy < -45 && Math.abs(dx) < 40) {
+        e.handledByCard = true;
+        suppressCardClickUntil = Date.now() + 400;
+        attemptPlay();
+      }
+    });
+    div.addEventListener('pointercancel', () => {
+      swipe = null;
+    });
+    div.addEventListener('click', (e) => {
+      e.handledByCard = true; // the re-render below detaches this node, so the document-level "lower" handler can't tell it was a card tap
+      if (Date.now() < suppressCardClickUntil) return;
+      if (!isRaised) {
+        // First tap on a fanned card just brings it forward so it can be
+        // seen clearly; this works any time, even outside your turn, so
+        // the hand stays browsable. Only the second tap attempts to play it.
+        raisedCardId = card.id;
+        renderGame(state);
+        return;
+      }
+      attemptPlay();
     });
     handDiv.appendChild(div);
   });
@@ -1406,12 +1493,96 @@ function renderGame(state) {
   document.getElementById('passBtn').classList.toggle('hidden', !state.canPass || peelBlocking());
 
   const logBox = document.getElementById('logBox');
-  logBox.innerHTML = state.log.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
+  const logLines = state.log;
+  logBox.innerHTML = logLines
+    .map((l, i) => `<div class="${i >= logLines.length - 3 ? 'recent' : ''}${i === logLines.length - 1 ? ' latest' : ''}">${formatLogLine(l)}</div>`)
+    .join('');
   logBox.scrollTop = logBox.scrollHeight;
 
   if (window.Table3D) {
     Table3D.init();
     Table3D.sync();
+  }
+}
+
+function suitLabel(suit) {
+  return (suitSymbols[suit] || '') + (suitNames[suit] || '');
+}
+
+function explainNotMyTurn(state) {
+  const cp = state.players.find((p) => p.id === state.currentPlayerId);
+  return cp ? `今は ${cp.name} の番です` : '今は出せません';
+}
+
+function explainUnplayable(card, state) {
+  if (state.pendingChain) {
+    const r = state.pendingChain.rank;
+    return `${r}の連続中です。${r}かジョーカーで返すか、カードを引いてください`;
+  }
+  const top = state.topCard;
+  const topRank = top ? (top.type === 'joker' ? top.chosenRank : top.rank) : null;
+  const rankText = topRank ? ` / 数字 ${rankLabel(topRank)}` : '';
+  return `場は ${suitLabel(state.currentSuit)}${rankText} です。同じマークか同じ数字のカードを出してください`;
+}
+
+// 最後の1枚で出せない理由(サーバーのルールと同じ)。出せるなら null
+function explainLastCard(card, state, me) {
+  if ((state.myHand || []).length !== 1) return null;
+  if (card.type === 'joker') return 'ジョーカーは最後の1枚では出せません。カードを引いてください';
+  if (card.rank !== 8 && !(me && me.declaredPageOne)) {
+    return state.canDeclarePageOne
+      ? 'ページワンを宣言していないので上がれません。先に「ページワン！」を押してください'
+      : 'ページワンを宣言していないので上がれません。カードを引いてください';
+  }
+  return null;
+}
+
+// ログ中のカード名(「ハートの9」など)を、色付きのマーク+数字に置き換える
+function formatLogLine(line) {
+  const esc = escapeHtml(line);
+  return esc.replace(/(ハート|ダイヤ|スペード|クラブ)の(10|11|12|13|[1-9AJQK])/g, (m, suitName, rank) => {
+    const sym = { ハート: '♥', ダイヤ: '♦', スペード: '♠', クラブ: '♣' }[suitName];
+    const red = suitName === 'ハート' || suitName === 'ダイヤ';
+    return `<span class="lg-card ${red ? 'lg-red' : 'lg-blk'}">${sym}${rank}</span>`;
+  });
+}
+
+let prevDeclared = null; // 直前の描画で宣言済みだったプレイヤーID(初回は null)
+let wasMyTurn = false;
+const baseTitle = document.title;
+
+function playPageOneSound() {
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  tone(ctx, 'triangle', 660, 660, t, 0.14, 0.22);
+  tone(ctx, 'triangle', 990, 990, t + 0.13, 0.28, 0.22);
+}
+
+function playTurnSound() {
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  tone(ctx, 'sine', 880, 880, t, 0.12, 0.18);
+  tone(ctx, 'sine', 1175, 1175, t + 0.1, 0.18, 0.18);
+}
+
+function playResultSound(state) {
+  const mine = (state.winnerIds || []).includes(myId);
+  const ctx = ensureAudio();
+  if (mine) {
+    buzz([80, 50, 80, 50, 160]);
+    if (ctx) {
+      const t = ctx.currentTime;
+      [523, 659, 784, 1047].forEach((f, i) => tone(ctx, 'triangle', f, f, t + i * 0.1, 0.45, 0.2));
+    }
+  } else {
+    buzz(180);
+    if (ctx) {
+      const t = ctx.currentTime;
+      tone(ctx, 'sine', 330, 247, t, 0.5, 0.2);
+      tone(ctx, 'sine', 247, 196, t + 0.2, 0.6, 0.2);
+    }
   }
 }
 
