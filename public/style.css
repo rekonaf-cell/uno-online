@@ -917,3 +917,27 @@ body.my-turn::after {
 #actions { min-height: 66px; gap: 14px; align-items: center; flex-wrap: wrap; }
 #actions button { flex: 1 1 0; min-width: 120px; max-width: 220px; min-height: 56px; padding: 14px 10px; font-size: 20px; margin: 4px 0; }
 #hand { touch-action: pan-x; }
+
+/* 当たり返しの演出(暗転→一文字ずつ→倍返しだ！！) */
+#ronBackCut {
+  position: fixed; inset: 0; z-index: 55; background: #000; opacity: 0; transition: opacity 0.25s;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+#ronBackCut.go { opacity: 1; }
+#ronBackCut.out { opacity: 0; transition: opacity 0.4s; }
+#ronBackCut .rb-typed {
+  position: absolute; left: 0; right: 0; top: 42%; text-align: center; color: #fff;
+  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif; font-size: 26px; letter-spacing: 3px; min-height: 1.4em;
+}
+#ronBackCut .rb-big {
+  position: relative; color: #e5322e; font-weight: 900; white-space: nowrap; opacity: 0;
+  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif; font-size: min(15vw, 72px);
+  text-shadow: 3px 3px 0 #5a0d0d;
+}
+#ronBackCut .rb-big.slam { animation: rbSlam 0.5s ease-out forwards; }
+#ronBackCut .rb-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+#ronBackCut.hit .rb-flash { animation: rbFlash 0.4s ease-out; }
+#ronBackCut.hit { animation: rbShake 0.45s linear; }
+@keyframes rbSlam { 0% { transform: scale(3.2); opacity: 0; } 50% { transform: scale(0.92); opacity: 1; } 72% { transform: scale(1.07); } 100% { transform: scale(1); opacity: 1; } }
+@keyframes rbFlash { 0% { opacity: 0.9; } 100% { opacity: 0; } }
+@keyframes rbShake { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-9px, 5px); } 50% { transform: translate(8px, -6px); } 75% { transform: translate(-5px, -4px); } }

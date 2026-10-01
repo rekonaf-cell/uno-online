@@ -541,6 +541,63 @@ function playPeelSuspense(willOpen, card, actorId) {
   }
 }
 
+// 当たり返しの演出: 暗転 → 「やられたらやり返す」を一文字ずつ → 文字を消して
+// 大きく赤い「倍返しだ！！」。タップで飛ばせる。終わったら onDone を呼ぶ。
+function playRonBackCutscene(onDone) {
+  const old = document.getElementById('ronBackCut');
+  if (old) old.remove();
+  const TEXT = 'やられたらやり返す';
+  const ov = document.createElement('div');
+  ov.id = 'ronBackCut';
+  ov.innerHTML = '<div class="rb-typed"></div><div class="rb-big">倍返しだ！！</div><div class="rb-flash"></div>';
+  document.body.appendChild(ov);
+  const typed = ov.querySelector('.rb-typed');
+  const big = ov.querySelector('.rb-big');
+  const timers = [];
+  const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+  void ov.offsetWidth;
+  ov.classList.add('go');
+
+  const STEP = 190;
+  const START = 600;
+  for (let i = 0; i < TEXT.length; i++) {
+    at(START + i * STEP, () => {
+      typed.textContent = TEXT.slice(0, i + 1);
+      const ctx = ensureAudio();
+      if (ctx) tone(ctx, 'triangle', 620 + i * 25, 620 + i * 25, ctx.currentTime, 0.09, 0.16);
+    });
+  }
+  const tBig = START + TEXT.length * STEP + 600;
+  at(tBig - 200, () => {
+    typed.textContent = ''; // 倍返しが出る前に文字は消す
+  });
+  at(tBig, () => {
+    big.classList.add('slam');
+    ov.classList.add('hit');
+    const ctx = ensureAudio();
+    if (ctx) {
+      const t = ctx.currentTime;
+      tone(ctx, 'sine', 120, 32, t, 0.9, 0.8);
+      noiseBurst(ctx, t, 0.5, 'lowpass', 3000, 120, 0.6);
+      tone(ctx, 'square', 220, 220, t, 0.12, 0.07);
+    }
+    buzz([120, 60, 220]);
+  });
+  const total = tBig + 1900;
+
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    timers.forEach(clearTimeout);
+    ov.classList.add('out');
+    setTimeout(() => ov.remove(), 400);
+    onDone();
+  };
+  ov.addEventListener('click', finish);
+  at(total, finish);
+}
+
 let lastAnimatedActionSeq = null; // null = haven't seen a state yet, so the first one is a join/reload, not a new move
 function handleActionAnimation(state) {
   const action = state.lastAction;
@@ -1007,13 +1064,18 @@ function render(state) {
       pendingWinSig = scoreSig;
       whenPeelRevealed(() => {
         if (pendingWinSig !== scoreSig) return;
-        const open = () => {
+        const openModal = () => {
           if (pendingWinSig !== scoreSig) return;
-          endPeel();
           revealedWinSig = scoreSig;
           document.getElementById('winModal').classList.remove('hidden');
           scoreAnimGeneration += 1;
           playAllScoreAnims(state, scoreAnimGeneration);
+        };
+        const open = () => {
+          if (pendingWinSig !== scoreSig) return;
+          endPeel();
+          if (state.lastWinType === 'ronBack') playRonBackCutscene(openModal);
+          else openModal();
         };
         if (state.lastWinType === 'ron') {
           showPeelBurst('そいよ！');
@@ -1045,6 +1107,15 @@ function render(state) {
       };
       if (showFreeze) playDosunFreeze(winnerNames, afterCutscene);
       else playDosunPuchun(revealRows, afterCutscene);
+    } else if (isNewWin && state.lastWinType === 'ronBack') {
+      pendingWinSig = scoreSig;
+      playRonBackCutscene(() => {
+        if (pendingWinSig !== scoreSig) return;
+        revealedWinSig = scoreSig;
+        document.getElementById('winModal').classList.remove('hidden');
+        scoreAnimGeneration += 1;
+        playAllScoreAnims(state, scoreAnimGeneration);
+      });
     } else if (isNewWin) {
       pendingWinSig = scoreSig;
       revealedWinSig = scoreSig;
