@@ -467,7 +467,7 @@ function showPeelBurst(text) {
   }
 }
 
-function playPeelSuspense(willOpen, card) {
+function playPeelSuspense(willOpen, card, actorId) {
   if (peel.el) peel.el.remove();
   peel.timers.forEach(clearTimeout);
   const ov = document.createElement('div');
@@ -483,9 +483,10 @@ function playPeelSuspense(willOpen, card) {
   peel.el = ov;
   peel.active = true;
   peel.willOpen = willOpen;
+  peel.actorId = actorId || null;
   peel.revealed = false;
   peel.queue = [];
-  if (willOpen) document.body.classList.add('peeling');
+  document.body.classList.add('peeling');
 
   const ctx = ensureAudio();
   if (ctx) {
@@ -503,6 +504,8 @@ function playPeelSuspense(willOpen, card) {
     }
   }
 
+  if (lastGameState) renderGame(lastGameState); // 隠す表示(マスク)をすぐ反映
+
   if (willOpen) {
     peel.timers.push(
       setTimeout(() => {
@@ -515,7 +518,7 @@ function playPeelSuspense(willOpen, card) {
     );
     peel.timers.push(setTimeout(() => endPeel(), 90000)); // 万一終わらなかった時の保険
   } else {
-    peel.timers.push(setTimeout(() => endPeel(), 4300));
+    peel.timers.push(setTimeout(() => endPeel(), 3500));
   }
 }
 
@@ -534,10 +537,13 @@ function handleActionAnimation(state) {
   const pile = document.getElementById('drawPile');
   const center = document.getElementById('historyStack');
   if (action.type === 'draw') {
-    playDrawSound();
-    flyCard(pile, avatar, null, null);
+    // 演出中は引いたことが分かる動き・音を出さない
+    if (!action.suspense) {
+      playDrawSound();
+      flyCard(pile, avatar, null, null);
+    }
   } else if (action.type === 'play') {
-    playCardSound();
+    if (!action.suspense) playCardSound();
     if (action.chainCount >= 4 && !action.suspense) showSpeechBubble(action.playerId, '容赦せんよ！！');
     const card = state.topCard;
     if (action.suspense) {
@@ -546,7 +552,7 @@ function handleActionAnimation(state) {
       flyCard(avatar, center, card ? cardLabel(card) : '', card ? cardColorClass(card) : '');
     }
   }
-  if (action.type === 'draw' && action.suspense) playPeelSuspense(false, null);
+  if (action.type === 'draw' && action.suspense) playPeelSuspense(false, null, action.playerId);
 }
 
 // Mirrors game.js's cardPointValue()/handScore(): A/3/joker=10, J/Q/K keep
@@ -1118,6 +1124,20 @@ function renderHandSizePhase(state) {
 
 let lastGameState = null;
 
+// 引く演出の最中は、まだ次の人に番が移ったことや手札が増えたことを
+// 見せない(上がりでないことが先にバレてしまうため)。
+function applyPeelMask(state) {
+  if (!peel.active || peel.willOpen || !peel.actorId) return state;
+  return {
+    ...state,
+    currentPlayerId: peel.actorId,
+    deckCount: (state.deckCount || 0) + 1,
+    players: state.players.map((p) =>
+      p.id === peel.actorId && p.id !== myId ? { ...p, cardCount: Math.max(p.cardCount - 1, 0) } : p
+    ),
+  };
+}
+
 function renderScoreHistory(state) {
   const view = document.getElementById('historyView');
   const hist = state.scoreHistory || [];
@@ -1157,6 +1177,7 @@ document.addEventListener('click', (e) => {
 });
 function renderGame(state) {
   lastGameState = state;
+  state = applyPeelMask(state);
   const me = state.players.find((p) => p.id === myId);
   // Clockwise seating starting from whoever plays right after me, so every
   // screen shows the same table ring, just rotated to put "me" at the bottom.

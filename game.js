@@ -155,6 +155,7 @@ class Room {
     this.awaitingRonBack = null; // discarder's id while they decide whether to counter a 当たり claimed against them
     this.extraSkip = 0; // an owed extra advanceTurn() step (opening ace: the dealer still goes first, then this skips the next player once)
     this.seatsShuffled = false;
+    this.suspenseUntil = 0;
     this.scoreHistory = []; // one entry per finished round: { round, type, deltas, names, totals }
     this.awaitingOpeningDeclare = false; // true while the dealer still needs to declare a suit/number for an opening joker/8
   }
@@ -219,6 +220,9 @@ class Room {
   recordAction(type, playerId, chainCount = 0, suspense = false) {
     this.actionSeq += 1;
     this.lastAction = { type, playerId, seq: this.actionSeq, chainCount, suspense };
+    // A suspenseful draw must not be followed by the next move until the
+    // cutscene has run, or that move would give away that no one went out.
+    this.suspenseUntil = suspense && type === 'draw' ? Date.now() + 3700 : 0;
   }
 
   start(handSize = 7) {
@@ -480,6 +484,7 @@ class Room {
   }
 
   playCard(playerId, cardId, chosenSuit, chosenRank) {
+    if (Date.now() < this.suspenseUntil) return { error: '演出中です。少し待ってください' };
     if (this.awaitingOpeningDeclare) return { error: '親が最初のカードを宣言するまでお待ちください' };
     if (this.awaitingPassFrom.length > 0) return { error: '他のプレイヤーの確認待ちです' };
     const playerIndex = this.players.findIndex((p) => p.id === playerId);
@@ -709,6 +714,7 @@ class Room {
   }
 
   draw(playerId) {
+    if (Date.now() < this.suspenseUntil) return { error: '演出中です。少し待ってください' };
     if (this.awaitingOpeningDeclare) return { error: '親が最初のカードを宣言するまでお待ちください' };
     if (this.awaitingPassFrom.length > 0) return { error: '他のプレイヤーの確認待ちです' };
     const playerIndex = this.players.findIndex((p) => p.id === playerId);

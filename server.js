@@ -178,7 +178,7 @@ function scheduleBotStep(room) {
     if (!rooms.has(room.code)) return; // room was cleaned up meanwhile
     performBotStep(room, step);
     broadcastState(room);
-  }, BOT_MOVE_DELAY_MS);
+  }, Math.max(BOT_MOVE_DELAY_MS, (room.suspenseUntil || 0) - Date.now() + 200));
 }
 
 io.on('connection', (socket) => {
