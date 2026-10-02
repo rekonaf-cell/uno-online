@@ -493,16 +493,35 @@ function playDosunBgm(ctx, t0, tHit) {
 // ドン！のフリーズ演出(ミリオンゴッドのGODフリーズ風): 暗転 → 下の3リールが回って
 // 「ドン」「ドン」「ドン」と順に止まる → 白と金の閃光 → 光の筋の中に金色の巨大な
 // 「ドン」。画面タップで飛ばせる。
-function playDosunFreeze(winnerNames, onDone) {
+function playDosunFreeze(winnerNames, onDone, revealRows) {
   const old = document.getElementById('dosunGod');
   if (old) old.remove();
   const ov = document.createElement('div');
   ov.id = 'dosunGod';
-  const reelHtml = [0, 1, 2]
-    .map(
-      (i) =>
-        `<div class="dg-reel" data-i="${i}"><div class="dg-strip">${'<span>7</span><span>BAR</span><span>ドン</span>'.repeat(4)}</div><div class="dg-final">ドン</div></div>`
-    )
+  // リールには当たりの手札を並べる(手札が取れなければ従来どおり「ドン」×3)
+  let rows = (revealRows || [])
+    .filter((r) => r.cards && r.cards.length)
+    .slice(0, 3)
+    .map((r) => ({ name: r.name, items: r.cards.map((c) => ({ label: cardLabel(c), cls: cardColorClass(c) })) }));
+  if (rows.length === 0) rows = [{ name: '', items: [0, 1, 2].map(() => ({ label: 'ドン', cls: 'gold' })) }];
+  const maxN = Math.max(...rows.map((r) => r.items.length));
+  const gap = 8;
+  const rw = Math.max(34, Math.min(104, Math.floor((Math.min(window.innerWidth, 560) * 0.94 - gap * (maxN - 1)) / maxN)));
+  const rh = Math.round(rw * 1.3);
+  ov.style.setProperty('--rw', rw + 'px');
+  ov.style.setProperty('--rh', rh + 'px');
+  const spinLabels = ['♠7', '♥K', '♦3', '♣A', '♥9', '♠Q', '♦J', '♣5'];
+  const reelHtml = rows
+    .map((r) => {
+      const reels = r.items
+        .map((it, i) => {
+          const strip = [0, 1, 2, 3].map((k) => `<span>${spinLabels[(i * 3 + k) % spinLabels.length]}</span>`).join('').repeat(3);
+          return `<div class="dg-reel"><div class="dg-strip">${strip}</div><div class="dg-final ${it.cls}">${it.label}</div></div>`;
+        })
+        .join('');
+      const cap = r.name ? `<div class="dg-cap"></div>` : '';
+      return `<div class="dg-rowwrap">${cap}<div class="dg-row">${reels}</div></div>`;
+    })
     .join('');
   ov.innerHTML =
     '<div class="dg-rays"></div>' +
@@ -517,12 +536,22 @@ function playDosunFreeze(winnerNames, onDone) {
 
   const timers = [];
   const at = (ms, fn) => timers.push(setTimeout(fn, ms));
-  const reels = ov.querySelectorAll('.dg-reel');
+  const reelRows = Array.from(ov.querySelectorAll('.dg-row'));
+  const caps = ov.querySelectorAll('.dg-cap');
+  rows.forEach((r, ri) => {
+    if (r.name && caps[ri]) caps[ri].textContent = r.name + ' の手札';
+  });
+  if (rows.some((r) => r.name)) ov.querySelector('.dg-name').style.display = 'none';
   at(500, () => ov.classList.add('reels'));
-  const stopAt = [1500, 1950, 2400];
-  stopAt.forEach((ms, i) =>
-    at(ms, () => {
-      reels[i].classList.add('stopped');
+  const nStops = maxN;
+  const stopStep = Math.min(450, Math.floor(1100 / Math.max(1, nStops - 1)));
+  const firstStop = 1500;
+  for (let i = 0; i < nStops; i++) {
+    at(firstStop + i * stopStep, () => {
+      reelRows.forEach((row) => {
+        const rl = row.children[i];
+        if (rl) rl.classList.add('stopped');
+      });
       ov.classList.remove('bump');
       void ov.offsetWidth;
       ov.classList.add('bump');
@@ -533,9 +562,9 @@ function playDosunFreeze(winnerNames, onDone) {
         noiseBurst(ctx, t, 0.08, 'lowpass', 1500, 200, 0.4);
       }
       buzz(40);
-    })
-  );
-  const tFlash = 3100;
+    });
+  }
+  const tFlash = firstStop + (nStops - 1) * stopStep + 700;
   const ctx0 = ensureAudio();
   if (ctx0) playDosunBgm(ctx0, ctx0.currentTime, tFlash / 1000);
   at(tFlash, () => {
@@ -1231,7 +1260,7 @@ function render(state) {
         scoreAnimGeneration += 1;
         playAllScoreAnims(state, scoreAnimGeneration);
       };
-      if (showFreeze) playDosunFreeze(winnerNames, afterCutscene);
+      if (showFreeze) playDosunFreeze(winnerNames, afterCutscene, revealRows);
       else playDosunPuchun(revealRows, afterCutscene);
     } else if (isNewWin && state.lastWinType === 'ronBack') {
       pendingWinSig = scoreSig;

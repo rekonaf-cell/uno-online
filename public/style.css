@@ -951,25 +951,33 @@ body.my-turn::after {
 #dosunGod.out { opacity: 0; transition: opacity 0.4s; }
 #dosunGod.bump { animation: dgBump 0.2s linear; }
 #dosunGod .dg-reels {
-  position: absolute; left: 0; right: 0; bottom: 9%; display: flex; gap: 10px; justify-content: center;
+  position: absolute; left: 0; right: 0; bottom: 7%; display: flex; flex-direction: column; gap: 10px; align-items: center;
   opacity: 0; transform: translateY(30px); transition: opacity 0.4s, transform 0.4s;
 }
 #dosunGod.reels .dg-reels { opacity: 1; transform: none; }
 #dosunGod .dg-reel {
-  position: relative; width: min(26vw, 104px); height: min(30vw, 116px); overflow: hidden; border-radius: 8px;
+  position: relative; width: var(--rw, 96px); height: var(--rh, 124px); overflow: hidden; border-radius: 8px; flex-shrink: 0;
   border: 3px solid #d9a21b; background: radial-gradient(#1f4fb0, #0a1d52);
 }
 #dosunGod .dg-strip { position: absolute; left: 0; right: 0; top: 0; text-align: center; animation: dgSpin 0.35s linear infinite; filter: blur(2.5px); }
 #dosunGod .dg-strip span {
-  display: block; height: min(30vw, 116px); line-height: min(30vw, 116px); font-size: min(11vw, 44px); font-weight: 900; color: #f4d04d;
+  display: block; height: var(--rh, 124px); line-height: var(--rh, 124px); font-size: calc(var(--rw, 96px) * 0.4); font-weight: 900; color: #f4d04d;
 }
 #dosunGod .dg-final {
-  position: absolute; inset: 0; display: none; align-items: center; justify-content: center; font-size: min(12vw, 48px); font-weight: 900;
+  position: absolute; inset: 0; display: none; align-items: center; justify-content: center; font-size: calc(var(--rw, 96px) * 0.4); font-weight: 900;
+  background: #f5f0e6; color: #1a1a1a;
+}
+#dosunGod .dg-final.red-suit { color: #d21f1f; }
+#dosunGod .dg-final.black-suit { color: #1a1a1a; }
+#dosunGod .dg-final.joker { background: linear-gradient(135deg, #e6412e, #f2c12e, #3cb371, #3a6fd8); color: #fff; font-size: calc(var(--rw, 96px) * 0.2); }
+#dosunGod .dg-final.gold {
   background: linear-gradient(180deg, #fff7c2 0%, #ffd54a 40%, #d99a00 60%, #fff0a0 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
 }
+#dosunGod .dg-row { display: flex; gap: 8px; justify-content: center; }
+#dosunGod .dg-cap { text-align: center; color: #ffe27a; font-size: 13px; font-weight: 700; margin-bottom: 4px; }
 #dosunGod .dg-reel.stopped .dg-strip { display: none; }
 #dosunGod .dg-reel.stopped .dg-final { display: flex; }
-#dosunGod .dg-reel.stopped { border-color: #fff2a8; background: radial-gradient(#3b72d8, #0d2a74); }
+#dosunGod .dg-reel.stopped { border-color: #fff2a8; box-shadow: 0 0 14px rgba(255, 220, 100, 0.8); }
 #dosunGod .dg-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
 #dosunGod.burst .dg-flash { animation: dgFlash 1.1s ease-out; }
 #dosunGod .dg-rays {
@@ -992,7 +1000,7 @@ body.my-turn::after {
 #dosunGod.burst .dg-front { animation: dgGlint 1.6s 0.7s ease-in-out infinite; }
 #dosunGod .dg-name { position: relative; margin-top: 10px; font-size: 22px; font-weight: 800; color: #fff; text-shadow: 0 0 10px #ffb300; opacity: 0; }
 #dosunGod.burst .dg-name { animation: dgName 1s 0.9s ease-out forwards; }
-@keyframes dgSpin { from { transform: translateY(0); } to { transform: translateY(calc(-3 * min(30vw, 116px))); } }
+@keyframes dgSpin { from { transform: translateY(0); } to { transform: translateY(calc(-4 * var(--rh, 124px))); } }
 @keyframes dgBump { 0%, 100% { transform: translate(0, 0); } 30% { transform: translate(-4px, 7px); } 65% { transform: translate(3px, -3px); } }
 @keyframes dgFlash { 0% { opacity: 1; } 12% { opacity: 0.1; } 22% { opacity: 0.95; } 100% { opacity: 0; } }
 @keyframes dgRays { 0% { opacity: 0; transform: scale(0.2) rotate(0); } 15% { opacity: 1; } 100% { opacity: 0.85; transform: scale(1) rotate(70deg); } }
