@@ -389,6 +389,107 @@ function playDosunPuchun(rows, onDone) {
   dosunFreezeTimer = setTimeout(finish, total);
 }
 
+// ドン！フリーズ用のオリジナルBGM(音声ファイルなし・WebAudioで合成)。
+// 回転中の低い唸りとせり上がる音 → 閃光に合わせた衝撃音 → 金管風の和音進行と
+// きらめくアルペジオ。t0 = 演出の開始時刻、tHit = 閃光の時刻(t0からの秒数)。
+function playDosunBgm(ctx, t0, tHit) {
+  const master = ctx.createGain();
+  master.gain.value = 0.85;
+  const comp = ctx.createDynamicsCompressor();
+  master.connect(comp).connect(ctx.destination);
+  const voice = (type, freq, start, dur, peak, cutoff, attack = 0.02, detune = 0) => {
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.value = freq;
+    o.detune.value = detune;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(cutoff * 0.5, start);
+    f.frequency.linearRampToValueAtTime(cutoff, start + Math.min(0.25, dur * 0.4));
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.linearRampToValueAtTime(peak, start + attack);
+    g.gain.setValueAtTime(peak, start + Math.max(attack, dur - 0.18));
+    g.gain.exponentialRampToValueAtTime(0.0005, start + dur);
+    o.connect(f).connect(g).connect(master);
+    o.start(start);
+    o.stop(start + dur + 0.05);
+  };
+  const hit = t0 + tHit;
+
+  // 回転中: 低い唸り + せり上がるノイズ
+  voice('sawtooth', 55, t0 + 0.4, tHit - 0.4, 0.07, 400, 0.4);
+  voice('sawtooth', 82.4, t0 + 0.4, tHit - 0.4, 0.05, 500, 0.6);
+  const nLen = tHit - 0.6;
+  const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * nLen), ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const ns = ctx.createBufferSource();
+  ns.buffer = buf;
+  const nf = ctx.createBiquadFilter();
+  nf.type = 'bandpass';
+  nf.Q.value = 2;
+  nf.frequency.setValueAtTime(300, t0 + 0.6);
+  nf.frequency.exponentialRampToValueAtTime(5000, hit);
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.0001, t0 + 0.6);
+  ng.gain.exponentialRampToValueAtTime(0.25, hit - 0.05);
+  ng.gain.linearRampToValueAtTime(0.0001, hit);
+  ns.connect(nf).connect(ng).connect(master);
+  ns.start(t0 + 0.6);
+
+  // 衝撃
+  const boom = ctx.createOscillator();
+  boom.type = 'sine';
+  boom.frequency.setValueAtTime(110, hit);
+  boom.frequency.exponentialRampToValueAtTime(30, hit + 1.1);
+  const bg = ctx.createGain();
+  bg.gain.setValueAtTime(0.9, hit);
+  bg.gain.exponentialRampToValueAtTime(0.001, hit + 1.4);
+  boom.connect(bg).connect(master);
+  boom.start(hit);
+  boom.stop(hit + 1.5);
+  const cLen = 1.2;
+  const cb = ctx.createBuffer(1, Math.floor(ctx.sampleRate * cLen), ctx.sampleRate);
+  const cd = cb.getChannelData(0);
+  for (let i = 0; i < cd.length; i++) cd[i] = (Math.random() * 2 - 1) * (1 - i / cd.length);
+  const cs = ctx.createBufferSource();
+  cs.buffer = cb;
+  const cf = ctx.createBiquadFilter();
+  cf.type = 'highpass';
+  cf.frequency.value = 1500;
+  const cg = ctx.createGain();
+  cg.gain.value = 0.5;
+  cs.connect(cf).connect(cg).connect(master);
+  cs.start(hit);
+
+  // 和音進行(C → G/B → Am → F → C)。金管風 = のこぎり波を少しずらして重ねる
+  const chords = [
+    [261.6, 329.6, 392.0, 523.3],
+    [246.9, 293.7, 392.0, 493.9],
+    [220.0, 261.6, 329.6, 440.0],
+    [174.6, 261.6, 349.2, 440.0],
+    [261.6, 329.6, 392.0, 523.3, 659.3],
+  ];
+  const step = 0.62;
+  chords.forEach((ch, ci) => {
+    const st = hit + 0.05 + ci * step;
+    const dur = ci === chords.length - 1 ? 1.35 : step + 0.05;
+    ch.forEach((fr) => {
+      voice('sawtooth', fr, st, dur, 0.07, 2600, 0.03, -7);
+      voice('sawtooth', fr, st, dur, 0.07, 2600, 0.03, 7);
+    });
+    voice('sawtooth', ch[0] / 2, st, dur, 0.12, 700, 0.03); // 低音
+  });
+
+  // きらめくアルペジオ
+  const arp = [1046.5, 1318.5, 1568.0, 2093.0, 1568.0, 1318.5];
+  for (let i = 0; i < 16; i++) {
+    const fr = arp[i % arp.length] * (i >= 8 ? 1.2599 : 1);
+    voice('triangle', fr, hit + 0.5 + i * 0.12, 0.35, 0.055, 6000, 0.005);
+  }
+}
+
 // ドン！のフリーズ演出(ミリオンゴッドのGODフリーズ風): 暗転 → 下の3リールが回って
 // 「ドン」「ドン」「ドン」と順に止まる → 白と金の閃光 → 光の筋の中に金色の巨大な
 // 「ドン」。画面タップで飛ばせる。
@@ -436,26 +537,12 @@ function playDosunFreeze(winnerNames, onDone) {
   );
   const tFlash = 3100;
   const ctx0 = ensureAudio();
-  if (ctx0) {
-    // リールが回っている間の低い唸り
-    const t = ctx0.currentTime;
-    tone(ctx0, 'sawtooth', 55, 80, t + 0.5, 2.5, 0.07);
-  }
+  if (ctx0) playDosunBgm(ctx0, ctx0.currentTime, tFlash / 1000);
   at(tFlash, () => {
     ov.classList.add('burst');
-    const ctx = ensureAudio();
-    if (ctx) {
-      const t = ctx.currentTime;
-      noiseBurst(ctx, t, 1.0, 'lowpass', 4000, 100, 0.8);
-      tone(ctx, 'sine', 100, 28, t, 1.3, 0.9);
-      [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => {
-        tone(ctx, 'triangle', f, f, t + 0.12 + i * 0.09, 1.0, 0.17);
-        tone(ctx, 'sine', f * 2, f * 2, t + 0.12 + i * 0.09, 0.7, 0.05);
-      });
-    }
     buzz([150, 60, 150, 60, 300]);
   });
-  const total = tFlash + 3200;
+  const total = tFlash + 3900;
 
   let finished = false;
   const finish = () => {
