@@ -941,3 +941,65 @@ body.my-turn::after {
 @keyframes rbSlam { 0% { transform: scale(3.2); opacity: 0; } 50% { transform: scale(0.92); opacity: 1; } 72% { transform: scale(1.07); } 100% { transform: scale(1); opacity: 1; } }
 @keyframes rbFlash { 0% { opacity: 0.9; } 100% { opacity: 0; } }
 @keyframes rbShake { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-9px, 5px); } 50% { transform: translate(8px, -6px); } 75% { transform: translate(-5px, -4px); } }
+
+/* ドン！フリーズ(GOD風): 暗転 → 3リール停止 → 閃光 → 金色の巨大ロゴ */
+#dosunGod {
+  position: fixed; inset: 0; z-index: 50; background: #040716; opacity: 0; transition: opacity 0.25s; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; flex-direction: column;
+}
+#dosunGod.go { opacity: 1; }
+#dosunGod.out { opacity: 0; transition: opacity 0.4s; }
+#dosunGod.bump { animation: dgBump 0.2s linear; }
+#dosunGod .dg-reels {
+  position: absolute; left: 0; right: 0; bottom: 9%; display: flex; gap: 10px; justify-content: center;
+  opacity: 0; transform: translateY(30px); transition: opacity 0.4s, transform 0.4s;
+}
+#dosunGod.reels .dg-reels { opacity: 1; transform: none; }
+#dosunGod .dg-reel {
+  position: relative; width: min(26vw, 104px); height: min(30vw, 116px); overflow: hidden; border-radius: 8px;
+  border: 3px solid #d9a21b; background: radial-gradient(#1f4fb0, #0a1d52);
+}
+#dosunGod .dg-strip { position: absolute; left: 0; right: 0; top: 0; text-align: center; animation: dgSpin 0.35s linear infinite; filter: blur(2.5px); }
+#dosunGod .dg-strip span {
+  display: block; height: min(30vw, 116px); line-height: min(30vw, 116px); font-size: min(11vw, 44px); font-weight: 900; color: #f4d04d;
+}
+#dosunGod .dg-final {
+  position: absolute; inset: 0; display: none; align-items: center; justify-content: center; font-size: min(12vw, 48px); font-weight: 900;
+  background: linear-gradient(180deg, #fff7c2 0%, #ffd54a 40%, #d99a00 60%, #fff0a0 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+#dosunGod .dg-reel.stopped .dg-strip { display: none; }
+#dosunGod .dg-reel.stopped .dg-final { display: flex; }
+#dosunGod .dg-reel.stopped { border-color: #fff2a8; background: radial-gradient(#3b72d8, #0d2a74); }
+#dosunGod .dg-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+#dosunGod.burst .dg-flash { animation: dgFlash 1.1s ease-out; }
+#dosunGod .dg-rays {
+  position: absolute; left: 50%; top: 40%; width: 230vmax; height: 230vmax; margin: -115vmax 0 0 -115vmax; opacity: 0;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 224, 120, 0.9) 0 9deg, rgba(255, 224, 120, 0) 9deg 20deg);
+  -webkit-mask-image: radial-gradient(circle, #000 0%, rgba(0, 0, 0, 0.85) 8%, rgba(0, 0, 0, 0.35) 17%, transparent 30%);
+  mask-image: radial-gradient(circle, #000 0%, rgba(0, 0, 0, 0.85) 8%, rgba(0, 0, 0, 0.35) 17%, transparent 30%);
+}
+#dosunGod.burst .dg-rays { animation: dgRays 6s linear forwards; }
+#dosunGod .dg-logo { position: relative; margin-top: -14vh; opacity: 0; font-weight: 900; line-height: 1; font-size: min(46vw, 230px); letter-spacing: 2px; }
+#dosunGod .dg-logo span { display: block; font-family: 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Noto Sans JP', sans-serif; }
+#dosunGod .dg-back { color: #4a2a00; -webkit-text-stroke: min(3.4vw, 17px) #4a2a00; text-shadow: 0 min(1.6vw, 8px) 0 #2b1700, 0 0 40px rgba(255, 190, 40, 0.85); }
+#dosunGod .dg-front {
+  position: absolute; left: 0; top: 0; color: transparent; -webkit-background-clip: text; background-clip: text;
+  background-image: linear-gradient(110deg, transparent 38%, rgba(255, 255, 255, 0.95) 50%, transparent 62%),
+    linear-gradient(180deg, #fffbd0 0%, #ffd54a 34%, #e3a200 52%, #fff0a0 68%, #c98a00 100%);
+  background-size: 250% 100%, 100% 100%; background-position: 160% 0, 0 0; background-repeat: no-repeat;
+}
+#dosunGod.burst .dg-logo { animation: dgLogo 0.7s cubic-bezier(.2, 1.5, .4, 1) forwards; }
+#dosunGod.burst .dg-front { animation: dgGlint 1.6s 0.7s ease-in-out infinite; }
+#dosunGod .dg-name { position: relative; margin-top: 10px; font-size: 22px; font-weight: 800; color: #fff; text-shadow: 0 0 10px #ffb300; opacity: 0; }
+#dosunGod.burst .dg-name { animation: dgName 1s 0.9s ease-out forwards; }
+@keyframes dgSpin { from { transform: translateY(0); } to { transform: translateY(calc(-3 * min(30vw, 116px))); } }
+@keyframes dgBump { 0%, 100% { transform: translate(0, 0); } 30% { transform: translate(-4px, 7px); } 65% { transform: translate(3px, -3px); } }
+@keyframes dgFlash { 0% { opacity: 1; } 12% { opacity: 0.1; } 22% { opacity: 0.95; } 100% { opacity: 0; } }
+@keyframes dgRays { 0% { opacity: 0; transform: scale(0.2) rotate(0); } 15% { opacity: 1; } 100% { opacity: 0.85; transform: scale(1) rotate(70deg); } }
+@keyframes dgLogo { 0% { opacity: 0; transform: scale(0.25); } 60% { opacity: 1; transform: scale(1.16); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes dgGlint { 0% { background-position: 160% 0, 0 0; } 60%, 100% { background-position: -80% 0, 0 0; } }
+@keyframes dgName { to { opacity: 1; } }
+
+#dosunGod { transition: opacity 0.25s, background-color 0.8s; }
+#dosunGod.burst { background: radial-gradient(circle at 50% 38%, #7a5400 0%, #3a2700 38%, #0a0b1c 78%); }
+#dosunGod .dg-name { font-size: 24px; text-shadow: 0 0 12px #ffb300, 0 2px 0 #4a2a00; }

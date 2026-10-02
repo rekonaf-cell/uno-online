@@ -389,46 +389,85 @@ function playDosunPuchun(rows, onDone) {
   dosunFreezeTimer = setTimeout(finish, total);
 }
 
+// ドン！のフリーズ演出(ミリオンゴッドのGODフリーズ風): 暗転 → 下の3リールが回って
+// 「ドン」「ドン」「ドン」と順に止まる → 白と金の閃光 → 光の筋の中に金色の巨大な
+// 「ドン」。画面タップで飛ばせる。
 function playDosunFreeze(winnerNames, onDone) {
-  const old = document.getElementById('dosunFreeze');
+  const old = document.getElementById('dosunGod');
   if (old) old.remove();
-  clearTimeout(dosunFreezeTimer);
   const ov = document.createElement('div');
-  ov.id = 'dosunFreeze';
+  ov.id = 'dosunGod';
+  const reelHtml = [0, 1, 2]
+    .map(
+      (i) =>
+        `<div class="dg-reel" data-i="${i}"><div class="dg-strip">${'<span>7</span><span>BAR</span><span>ドン</span>'.repeat(4)}</div><div class="dg-final">ドン</div></div>`
+    )
+    .join('');
   ov.innerHTML =
-    '<div class="df-rays"></div><div class="df-crack"></div>' +
-    '<div class="df-text">ドン！！</div><div class="df-name"></div>';
-  ov.querySelector('.df-name').textContent = winnerNames;
+    '<div class="dg-rays"></div>' +
+    '<div class="dg-logo"><span class="dg-back">ドン</span><span class="dg-front">ドン</span></div>' +
+    '<div class="dg-name"></div>' +
+    `<div class="dg-reels">${reelHtml}</div>` +
+    '<div class="dg-flash"></div>';
+  ov.querySelector('.dg-name').textContent = winnerNames;
   document.body.appendChild(ov);
+  void ov.offsetWidth;
+  ov.classList.add('go');
 
-  const ctx = ensureAudio();
-  if (ctx) {
-    const t = ctx.currentTime;
-    tone(ctx, 'sine', 110, 32, t + 0.05, 0.9, 0.7); // 暗転の重低音
-    noiseBurst(ctx, t + 0.05, 0.5, 'lowpass', 500, 60, 0.5);
-    tone(ctx, 'sawtooth', 40, 55, t + 1.2, 1.0, 0.12); // 静寂の中の唸り
-    const b = t + 2.2; // 発光
-    noiseBurst(ctx, b, 0.9, 'lowpass', 3000, 100, 0.7);
-    tone(ctx, 'sine', 90, 30, b, 1.1, 0.8);
-    [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => {
-      tone(ctx, 'triangle', f, f, b + 0.1 + i * 0.09, 0.9, 0.16);
-      tone(ctx, 'sine', f * 2, f * 2, b + 0.1 + i * 0.09, 0.6, 0.05);
-    });
+  const timers = [];
+  const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+  const reels = ov.querySelectorAll('.dg-reel');
+  at(500, () => ov.classList.add('reels'));
+  const stopAt = [1500, 1950, 2400];
+  stopAt.forEach((ms, i) =>
+    at(ms, () => {
+      reels[i].classList.add('stopped');
+      ov.classList.remove('bump');
+      void ov.offsetWidth;
+      ov.classList.add('bump');
+      const ctx = ensureAudio();
+      if (ctx) {
+        const t = ctx.currentTime;
+        tone(ctx, 'sine', 180, 55, t, 0.28, 0.6);
+        noiseBurst(ctx, t, 0.08, 'lowpass', 1500, 200, 0.4);
+      }
+      buzz(40);
+    })
+  );
+  const tFlash = 3100;
+  const ctx0 = ensureAudio();
+  if (ctx0) {
+    // リールが回っている間の低い唸り
+    const t = ctx0.currentTime;
+    tone(ctx0, 'sawtooth', 55, 80, t + 0.5, 2.5, 0.07);
   }
+  at(tFlash, () => {
+    ov.classList.add('burst');
+    const ctx = ensureAudio();
+    if (ctx) {
+      const t = ctx.currentTime;
+      noiseBurst(ctx, t, 1.0, 'lowpass', 4000, 100, 0.8);
+      tone(ctx, 'sine', 100, 28, t, 1.3, 0.9);
+      [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => {
+        tone(ctx, 'triangle', f, f, t + 0.12 + i * 0.09, 1.0, 0.17);
+        tone(ctx, 'sine', f * 2, f * 2, t + 0.12 + i * 0.09, 0.7, 0.05);
+      });
+    }
+    buzz([150, 60, 150, 60, 300]);
+  });
+  const total = tFlash + 3200;
 
   let finished = false;
   const finish = () => {
     if (finished) return;
     finished = true;
-    clearTimeout(dosunFreezeTimer);
+    timers.forEach(clearTimeout);
     ov.classList.add('out');
     setTimeout(() => ov.remove(), 400);
     onDone();
   };
   ov.addEventListener('click', finish);
-  void ov.offsetWidth;
-  ov.classList.add('go');
-  dosunFreezeTimer = setTimeout(finish, DOSUN_FREEZE_MS);
+  at(total, finish);
 }
 
 // ページワン宣言済みの最後の1枚で「上がる/引く」を決めたとき、ランダムで入る
