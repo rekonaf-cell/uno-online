@@ -1011,3 +1011,50 @@ body.my-turn::after {
 #dosunGod { transition: opacity 0.25s, background-color 0.8s; }
 #dosunGod.burst { background: radial-gradient(circle at 50% 38%, #7a5400 0%, #3a2700 38%, #0a0b1c 78%); }
 #dosunGod .dg-name { font-size: 24px; text-shadow: 0 0 12px #ffb300, 0 2px 0 #4a2a00; }
+
+/* ドン！「プチュン」演出(作り込み版): ブラウン管が消える → 静寂 → 光の点 → 手札が降る → 金色のドン */
+body.crt-off #app { animation: crtOff 0.5s cubic-bezier(.6, 0, 1, 1) forwards; transform-origin: 50% 50%; }
+@keyframes crtOff {
+  0% { transform: scale(1, 1); filter: brightness(1); opacity: 1; }
+  55% { transform: scale(1, 0.012); filter: brightness(4); opacity: 1; }
+  80% { transform: scale(0.18, 0.006); filter: brightness(8); opacity: 1; }
+  100% { transform: scale(0, 0.004); filter: brightness(8); opacity: 0; }
+}
+#dosunGod.pc { background: transparent; }
+#dosunGod.pc.black { background: #000; transition: background 0.1s, opacity 0.25s; }
+#dosunGod.pc.burst { background: radial-gradient(circle at 50% 38%, #7a5400 0%, #3a2700 38%, #0a0b1c 78%); }
+#dosunGod .pc-dot {
+  position: absolute; left: 50%; top: 38%; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%;
+  background: #fff6c8; box-shadow: 0 0 12px 4px rgba(255, 214, 90, 0.9); opacity: 0;
+}
+#dosunGod.dotgrow:not(.burst) .pc-dot { animation: pcDot 1s ease-in forwards; }
+@keyframes pcDot {
+  0% { opacity: 1; transform: scale(1); }
+  70% { opacity: 1; transform: scale(2.2); box-shadow: 0 0 24px 10px rgba(255, 214, 90, 0.9); }
+  100% { opacity: 0.9; transform: scale(5); box-shadow: 0 0 40px 18px rgba(255, 214, 90, 0.9); }
+}
+#dosunGod.burst .pc-dot { opacity: 0; }
+#dosunGod .pc-rows { position: absolute; left: 0; right: 0; bottom: 7%; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+#dosunGod .pc-row { display: flex; gap: 8px; justify-content: center; }
+#dosunGod .pc-card {
+  width: var(--cw, 72px); height: calc(var(--cw, 72px) * 1.4); border-radius: 8px; background: #f5f0e6; color: #1a1a1a; border: 2px solid #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: calc(var(--cw, 72px) * 0.36);
+  opacity: 0; transform: translateY(-120vh); box-shadow: 0 0 14px rgba(255, 220, 100, 0.7);
+}
+#dosunGod .pc-card.red-suit { color: #d21f1f; }
+#dosunGod .pc-card.joker { background: linear-gradient(135deg, #e6412e, #f2c12e, #3cb371, #3a6fd8); color: #fff; font-size: calc(var(--cw, 72px) * 0.17); }
+#dosunGod .pc-card.drop { animation: pcDrop 0.55s cubic-bezier(.5, 0, .9, .5) forwards; }
+@keyframes pcDrop {
+  0% { opacity: 1; transform: translateY(-120vh) scale(1.7); }
+  70% { opacity: 1; transform: translateY(0) scale(1); }
+  82% { opacity: 1; transform: translateY(-16px) scale(1); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+#dosunGod .pc-spark {
+  position: fixed; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #ffe27a;
+  box-shadow: 0 0 8px 2px rgba(255, 210, 80, 0.9); animation: pcSpark 0.65s ease-out forwards; pointer-events: none;
+}
+@keyframes pcSpark { to { transform: translate(var(--dx), var(--dy)); opacity: 0; } }
+#dosunGod.pc .dg-cap { color: #ffe27a; }
+#dosunGod.pc .dg-cap { opacity: 0; transition: opacity 0.3s; }
+#dosunGod.pc.rows .dg-cap { opacity: 1; }

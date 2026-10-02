@@ -291,108 +291,126 @@ function tone(ctx, type, freqFrom, freqTo, start, dur, peak) {
 const DOSUN_FREEZE_MS = 4600;
 let dosunFreezeTimer = null;
 
-// もう一つの演出: 「プチュン」とブラウン管のように暗転し、勝者の手札を
-// 1枚ずつ開いていく。所要時間は手札の枚数で変わる。タップで飛ばせる。
+// もう一つの演出「プチュン」: 画面がブラウン管の電源を切ったように潰れて消える →
+// 完全な暗闇と静寂(心臓の鼓動だけ) → 小さな光の点がふくらむ → 勝者の手札が上から
+// 1枚ずつ降ってくる(着地のたびに火花) → 閃光と金色の巨大な「ドン」+BGM。
+// 画面タップで飛ばせる。所要時間は手札の枚数で変わる。
 function playDosunPuchun(rows, onDone) {
-  const old = document.getElementById('dosunFreeze');
+  const old = document.getElementById('dosunGod');
   if (old) old.remove();
-  clearTimeout(dosunFreezeTimer);
+  const usable = rows.filter((r) => r.cards && r.cards.length).slice(0, 3);
   const ov = document.createElement('div');
-  ov.id = 'dosunFreeze';
-  ov.className = 'puchun';
-  ov.innerHTML = '<div class="df-line"></div><div class="df-rows"></div><div class="df-text">ドン！！</div>';
-  const rowsDiv = ov.querySelector('.df-rows');
-  const cardEls = [];
-  for (const row of rows) {
-    const r = document.createElement('div');
-    r.className = 'df-row';
-    const label = document.createElement('div');
-    label.className = 'df-name2';
-    label.textContent = row.name;
-    r.appendChild(label);
-    const cs = document.createElement('div');
-    cs.className = 'df-cards';
-    for (const card of row.cards) {
-      const c = document.createElement('div');
-      c.className = 'mini-card df-card ' + cardColorClass(card);
-      c.textContent = cardLabel(card);
-      cs.appendChild(c);
-      cardEls.push(c);
-    }
-    r.appendChild(cs);
-    rowsDiv.appendChild(r);
-  }
+  ov.id = 'dosunGod';
+  ov.className = 'pc';
+  const maxN = Math.max(1, ...usable.map((r) => r.cards.length));
+  const gap = 8;
+  const cw = Math.max(36, Math.min(88, Math.floor((Math.min(window.innerWidth, 560) * 0.94 - gap * (maxN - 1)) / maxN)));
+  ov.style.setProperty('--cw', cw + 'px');
+  const rowsHtml = usable
+    .map((r) => {
+      const cards = r.cards
+        .map((c) => `<div class="pc-card ${cardColorClass(c)}">${cardLabel(c)}</div>`)
+        .join('');
+      return `<div class="pc-rowwrap"><div class="dg-cap">${escapeHtml(r.name)} の手札</div><div class="pc-row">${cards}</div></div>`;
+    })
+    .join('');
+  ov.innerHTML =
+    '<div class="dg-rays"></div><div class="pc-dot"></div>' +
+    '<div class="dg-logo"><span class="dg-back">ドン</span><span class="dg-front">ドン</span></div>' +
+    `<div class="pc-rows">${rowsHtml}</div><div class="dg-flash"></div>`;
   document.body.appendChild(ov);
 
-  const START = 1300;
-  const STEP = 800;
-  const total = START + cardEls.length * STEP + 1500;
+  const timers = [];
+  const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+  const T_BLACK = 520;
+  const T_DOT = 1950;
+  const T_CARDS = 2950;
+  const step = Math.min(700, Math.floor(2100 / Math.max(1, maxN)));
+  const tHit = T_CARDS + maxN * step + 450;
   const ctx = ensureAudio();
+
+  // 1) プチュン: 実際の画面(#app)を、線 → 点へと潰す
+  document.body.classList.add('crt-off');
   if (ctx) {
     const t = ctx.currentTime;
-    tone(ctx, 'sine', 1800, 60, t + 0.02, 0.28, 0.5); // プチュン
-    noiseBurst(ctx, t + 0.02, 0.08, 'highpass', 4000, 4000, 0.3);
+    tone(ctx, 'sine', 2200, 60, t + 0.02, 0.3, 0.5);
+    noiseBurst(ctx, t + 0.02, 0.09, 'highpass', 4500, 4500, 0.35);
+    // 2) 静寂の中の鼓動
+    tone(ctx, 'sine', 70, 38, t + 1.0, 0.22, 0.55);
+    tone(ctx, 'sine', 70, 38, t + 1.34, 0.26, 0.6);
+    // 3) 光の点がふくらむ音 → 手札が降る間のせり上がり → 衝撃以降はBGM
+    playDosunBgm(ctx, t, tHit / 1000, T_DOT / 1000);
   }
-  const timers = [];
-  cardEls.forEach((el, i) => {
-    timers.push(
-      setTimeout(() => {
-        ov.classList.remove('bump');
-        void ov.offsetWidth;
-        ov.classList.add('bump'); // 着地の衝撃
-        const c = ensureAudio();
-        if (c) {
-          const n = c.currentTime;
-          tone(c, 'sine', 140, 40, n, 0.35, 0.7);
-          noiseBurst(c, n, 0.15, 'lowpass', 1200, 100, 0.5);
-        }
-      }, START + i * STEP + 380)
-    );
-    timers.push(
-      setTimeout(() => {
-        el.classList.add('open');
-        const c = ensureAudio();
-        if (c) {
-          const n = c.currentTime;
-          tone(c, 'sine', 500, 900, n, 0.3, 0.12); // 落ちてくる風切り音
-        }
-      }, START + i * STEP)
-    );
-  });
-  timers.push(
-    setTimeout(() => {
+  at(T_BLACK, () => ov.classList.add('black'));
+  at(T_DOT, () => ov.classList.add('dotgrow'));
+
+  // 4) 手札が上から降ってくる(行ごとに、左から順に)
+  const rowEls = Array.from(ov.querySelectorAll('.pc-row'));
+  for (let i = 0; i < maxN; i++) {
+    at(T_CARDS + i * step, () => {
+      rowEls.forEach((row) => {
+        const el = row.children[i];
+        if (!el) return;
+        el.classList.add('drop');
+      });
+      ov.classList.add('rows');
+    });
+    at(T_CARDS + i * step + 380, () => {
       ov.classList.remove('bump');
-      ov.classList.add('finale');
+      void ov.offsetWidth;
+      ov.classList.add('bump');
+      rowEls.forEach((row) => {
+        const el = row.children[i];
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        for (let k = 0; k < 7; k++) {
+          const sp = document.createElement('i');
+          sp.className = 'pc-spark';
+          sp.style.left = r.left + r.width / 2 + 'px';
+          sp.style.top = r.bottom - 4 + 'px';
+          const ang = Math.PI * (1 + Math.random());
+          sp.style.setProperty('--dx', Math.cos(ang) * (30 + Math.random() * 50) + 'px');
+          sp.style.setProperty('--dy', Math.sin(ang) * (20 + Math.random() * 45) + 'px');
+          ov.appendChild(sp);
+          setTimeout(() => sp.remove(), 700);
+        }
+      });
       const c = ensureAudio();
       if (c) {
-        const n = c.currentTime;
-        tone(c, 'sine', 100, 35, n, 0.9, 0.7);
-        noiseBurst(c, n, 0.6, 'lowpass', 2500, 100, 0.6);
-        [784, 1047, 1319, 1568].forEach((f, i) => tone(c, 'triangle', f, f, n + 0.05 + i * 0.08, 0.8, 0.15));
+        const t = c.currentTime;
+        tone(c, 'sine', 150, 42, t, 0.35, 0.7);
+        noiseBurst(c, t, 0.12, 'lowpass', 1300, 100, 0.5);
       }
-    }, START + cardEls.length * STEP + 300)
-  );
+      buzz(50);
+    });
+  }
+  // 5) 閃光 → 金色の「ドン」
+  at(tHit, () => {
+    ov.classList.add('burst');
+    buzz([150, 60, 150, 60, 300]);
+  });
+  const total = tHit + 3900;
 
   let finished = false;
   const finish = () => {
     if (finished) return;
     finished = true;
     timers.forEach(clearTimeout);
-    clearTimeout(dosunFreezeTimer);
     ov.classList.add('out');
+    document.body.classList.remove('crt-off');
     setTimeout(() => ov.remove(), 400);
     onDone();
   };
   ov.addEventListener('click', finish);
   void ov.offsetWidth;
   ov.classList.add('go');
-  dosunFreezeTimer = setTimeout(finish, total);
+  at(total, finish);
 }
 
 // ドン！フリーズ用のオリジナルBGM(音声ファイルなし・WebAudioで合成)。
 // 回転中の低い唸りとせり上がる音 → 閃光に合わせた衝撃音 → 金管風の和音進行と
 // きらめくアルペジオ。t0 = 演出の開始時刻、tHit = 閃光の時刻(t0からの秒数)。
-function playDosunBgm(ctx, t0, tHit) {
+function playDosunBgm(ctx, t0, tHit, riseFrom = 0.4) {
   const master = ctx.createGain();
   master.gain.value = 0.85;
   const comp = ctx.createDynamicsCompressor();
@@ -418,9 +436,9 @@ function playDosunBgm(ctx, t0, tHit) {
   const hit = t0 + tHit;
 
   // 回転中: 低い唸り + せり上がるノイズ
-  voice('sawtooth', 55, t0 + 0.4, tHit - 0.4, 0.07, 400, 0.4);
-  voice('sawtooth', 82.4, t0 + 0.4, tHit - 0.4, 0.05, 500, 0.6);
-  const nLen = tHit - 0.6;
+  voice('sawtooth', 55, t0 + riseFrom, tHit - riseFrom, 0.07, 400, 0.4);
+  voice('sawtooth', 82.4, t0 + riseFrom, tHit - riseFrom, 0.05, 500, 0.6);
+  const nLen = tHit - riseFrom - 0.2;
   const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * nLen), ctx.sampleRate);
   const d = buf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -429,14 +447,14 @@ function playDosunBgm(ctx, t0, tHit) {
   const nf = ctx.createBiquadFilter();
   nf.type = 'bandpass';
   nf.Q.value = 2;
-  nf.frequency.setValueAtTime(300, t0 + 0.6);
+  nf.frequency.setValueAtTime(300, t0 + riseFrom + 0.2);
   nf.frequency.exponentialRampToValueAtTime(5000, hit);
   const ng = ctx.createGain();
-  ng.gain.setValueAtTime(0.0001, t0 + 0.6);
+  ng.gain.setValueAtTime(0.0001, t0 + riseFrom + 0.2);
   ng.gain.exponentialRampToValueAtTime(0.25, hit - 0.05);
   ng.gain.linearRampToValueAtTime(0.0001, hit);
   ns.connect(nf).connect(ng).connect(master);
-  ns.start(t0 + 0.6);
+  ns.start(t0 + riseFrom + 0.2);
 
   // 衝撃
   const boom = ctx.createOscillator();
