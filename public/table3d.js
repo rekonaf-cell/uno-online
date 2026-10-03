@@ -131,9 +131,9 @@
   function backTex() {
     if (state.tex.back) return state.tex.back;
     state.tex.back = makeTex(128, 180, function (x, w, h) {
-      x.fillStyle = '#222';
+      x.fillStyle = '#b71c1c';
       x.fillRect(0, 0, w, h);
-      x.strokeStyle = '#3a3a3a';
+      x.strokeStyle = '#7f0000';
       x.lineWidth = 8;
       for (var i = -h; i < w; i += 18) {
         x.beginPath();
@@ -141,9 +141,9 @@
         x.lineTo(i + h, h);
         x.stroke();
       }
-      x.strokeStyle = '#555';
-      x.lineWidth = 6;
-      x.strokeRect(3, 3, w - 6, h - 6);
+      x.strokeStyle = '#fff';
+      x.lineWidth = 9;
+      x.strokeRect(5, 5, w - 10, h - 10);
     });
     return state.tex.back;
   }
@@ -595,7 +595,7 @@
       from: from,
       to: to,
       start: performance.now(),
-      dur: 700,
+      dur: label ? 700 : 850,
       spin: label ? -0.5 : 0.5,
       onLand: function () {
         if (toPile) {

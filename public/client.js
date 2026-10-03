@@ -771,8 +771,49 @@ function playRonBackCutscene(onDone) {
   at(total, finish);
 }
 
+// カードを引いたことが一目で分かる合図(バッジが跳ねて「+N」、自分のカードは手札に飛び込む)
+let fxPrevCounts = {};
+let fxPrevMyHandLen = null;
+function drawFx(state, action, prevCounts, prevMyHandLen) {
+  const p = state.players.find((x) => x.id === action.playerId);
+  if (!p) return;
+  const isMe = action.playerId === myId;
+  // 演出で隠している最中は、他の人の枚数の増加を先に見せない
+  if (action.suspense && !isMe) return;
+  const before = prevCounts[action.playerId];
+  const n = Math.max(1, before === undefined ? 1 : p.cardCount - before);
+  const mine = isMe ? Math.max(1, prevMyHandLen === null ? 1 : (state.myHand || []).length - prevMyHandLen) : 0;
+  const lastCards = () => Array.from(document.querySelectorAll('#hand .card')).slice(-mine);
+  if (isMe) lastCards().forEach((c) => c.classList.add('incoming')); // 飛んでくるまで隠す
+  // カードが飛んで着く頃(約0.6秒後)に、バッジと手札で合図を出す
+  setTimeout(() => {
+    const avatar = getSeatAvatarEl(action.playerId);
+    const badge = avatar && avatar.querySelector('.count-badge');
+    if (badge) {
+      badge.classList.remove('pop');
+      void badge.offsetWidth;
+      badge.classList.add('pop');
+      const f = document.createElement('span');
+      f.className = 'count-float';
+      f.textContent = '+' + n;
+      badge.appendChild(f);
+      setTimeout(() => f.remove(), 1150);
+    }
+    if (isMe) {
+      lastCards().forEach((c) => {
+        c.classList.remove('incoming');
+        c.classList.add('new-card');
+      });
+    }
+  }, 600);
+}
+
 let lastAnimatedActionSeq = null; // null = haven't seen a state yet, so the first one is a join/reload, not a new move
 function handleActionAnimation(state) {
+  const prevCounts = fxPrevCounts;
+  const prevMyHandLen = fxPrevMyHandLen;
+  fxPrevCounts = Object.fromEntries(state.players.map((p) => [p.id, p.cardCount]));
+  fxPrevMyHandLen = (state.myHand || []).length;
   const action = state.lastAction;
   if (!action) return;
   if (lastAnimatedActionSeq === null) {
@@ -791,6 +832,7 @@ function handleActionAnimation(state) {
       playDrawSound();
       flyCard(pile, avatar, null, null);
     }
+    drawFx(state, action, prevCounts, prevMyHandLen);
   } else if (action.type === 'play') {
     if (!action.suspense) playCardSound();
     if (action.chainCount >= 4 && !action.suspense) showSpeechBubble(action.playerId, '容赦せんよ！！');
@@ -1082,6 +1124,24 @@ function resetPendingSuitModal() {
   pendingChosenSuit = null;
   pendingChosenRank = null;
 }
+
+function setSuitCancel(visible) {
+  document.getElementById('suitCancelBtn').classList.toggle('hidden', !visible);
+}
+
+// 8・ジョーカーのマーク/数字選択をやめて、手札に戻る(最初の場札の宣言は必須なので除く)
+function cancelSuitModal() {
+  if (pendingIsOpeningDeclare) return;
+  if (document.getElementById('suitModal').classList.contains('hidden')) return;
+  resetPendingSuitModal();
+}
+document.getElementById('suitCancelBtn').addEventListener('click', cancelSuitModal);
+document.getElementById('suitModal').addEventListener('click', (e) => {
+  if (e.target.id === 'suitModal') cancelSuitModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') cancelSuitModal();
+});
 
 function tryEmitPendingPlay() {
   if (pendingChosenSuit === null) return;
@@ -1496,6 +1556,7 @@ function renderGame(state) {
     pendingChosenSuit = null;
     pendingChosenRank = null;
     document.getElementById('suitModal').classList.remove('hidden');
+    setSuitCancel(false);
     document.getElementById('rankChooser').classList.toggle('hidden', !pendingIsJoker);
     // Declaring the very first card of the game: there's no board to
     // match against yet, so this one really is fully free.
@@ -1691,6 +1752,7 @@ function renderGame(state) {
         const lockedRank = pendingIsJoker && state.pendingChain ? state.pendingChain.rank : null;
         pendingChosenRank = lockedRank;
         document.getElementById('suitModal').classList.remove('hidden');
+        setSuitCancel(true);
         document.getElementById('rankChooser').classList.toggle('hidden', !pendingIsJoker || lockedRank !== null);
         // A standalone joker play still has to match the board on suit or
         // number — only the chain-answer case (locked above) is exempt.
