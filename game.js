@@ -884,15 +884,17 @@ class Room {
     let totalGain = 0;
     for (const claimantId of claimants) {
       const claimant = this.players.find((p) => p.id === claimantId);
-      // A claimant whose hand scores 0 (e.g. a lone 2 used to claim) would
-      // pay nothing, so they draw 2 cards and pay on those plus the 2s.
-      if (claimant.hand.length > 0 && handScore(claimant.hand) === 0) {
+      // Countering a discarded 2: the claimant draws 2 cards and pays on
+      // their hand plus those cards plus the 2 itself (which doubles it).
+      let scoringHand = claimant.hand;
+      if (this.lastDiscardCard.rank === 2) {
         this.drawCards(claimant, 2);
+        scoringHand = [...claimant.hand, this.lastDiscardCard];
       }
-      const pts = handScore(claimant.hand) * 4;
+      const pts = handScore(scoringHand) * 4;
       claimant.score -= pts;
       deltas[claimantId] = (deltas[claimantId] || 0) - pts;
-      breakdown[claimantId] = { hand: [...claimant.hand], multiplier: 4 };
+      breakdown[claimantId] = { hand: [...scoringHand], multiplier: 4 };
       totalGain += pts;
     }
     discarder.score += totalGain;
