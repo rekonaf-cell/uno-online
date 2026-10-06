@@ -884,6 +884,11 @@ class Room {
     let totalGain = 0;
     for (const claimantId of claimants) {
       const claimant = this.players.find((p) => p.id === claimantId);
+      // A claimant whose hand scores 0 (e.g. a lone 2 used to claim) would
+      // pay nothing, so they draw 2 cards and pay on those plus the 2s.
+      if (claimant.hand.length > 0 && handScore(claimant.hand) === 0) {
+        this.drawCards(claimant, 2);
+      }
       const pts = handScore(claimant.hand) * 4;
       claimant.score -= pts;
       deltas[claimantId] = (deltas[claimantId] || 0) - pts;
